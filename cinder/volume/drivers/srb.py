@@ -258,10 +258,10 @@ class SRBDriver(driver.VolumeDriver):
     @staticmethod
     def _device_name(volume):
         volume_id = SRBDriver._get_volid(volume)
-        # NOTE(Joachim) The device names cannot be longer than 32bytes,
-        # se we need to truncate the volume id to fit in, knowing that the
-        truncated_id = volume_id[:24]
-        return "cinder-%s" % (truncated_id)
+        name = 'cinder-%s' % volume_id
+
+        # Device names can't be longer than 32 bytes
+        return name[:32]
 
     @staticmethod
     def _device_path(volume):
