@@ -119,6 +119,62 @@ class LVM(executor.Executor):
         cmd = ['vgcreate', self.vg_name, ','.join(pv_list)]
         self._execute(*cmd, root_helper=self._root_helper, run_as_root=True)
 
+    def activate_vg(self):
+        """Activate the Volume Group associated with this instantiation.
+
+        :raises: putils.ProcessExecutionError
+        """
+
+        cmd = ['vgchange', '-ay', self.vg_name]
+        try:
+            self._execute(*cmd,
+                          root_helper=self._root_helper,
+                          run_as_root=True)
+        except putils.ProcessExecutionError as err:
+            LOG.exception(_LE('Error activating Volume Group'))
+            LOG.error(_LE('Cmd     :%s') % err.cmd)
+            LOG.error(_LE('StdOut  :%s') % err.stdout)
+            LOG.error(_LE('StdErr  :%s') % err.stderr)
+            raise
+
+    def deactivate_vg(self):
+        """Deactivate the Volume Group associated with this instantiation.
+
+        This forces LVM to release any reference to the device.
+
+        :raises: putils.ProcessExecutionError
+        """
+
+        cmd = ['vgchange', '-an', self.vg_name]
+        try:
+            self._execute(*cmd,
+                          root_helper=self._root_helper,
+                          run_as_root=True)
+        except putils.ProcessExecutionError as err:
+            LOG.exception(_LE('Error deactivating Volume Group'))
+            LOG.error(_LE('Cmd     :%s') % err.cmd)
+            LOG.error(_LE('StdOut  :%s') % err.stdout)
+            LOG.error(_LE('StdErr  :%s') % err.stderr)
+            raise
+
+    def destroy_vg(self):
+        """Destroy the Volume Group associated with this instantiation.
+
+        :raises: putils.ProcessExecutionError
+        """
+
+        cmd = ['vgremove', '-f', self.vg_name]
+        try:
+            self._execute(*cmd,
+                          root_helper=self._root_helper,
+                          run_as_root=True)
+        except putils.ProcessExecutionError as err:
+            LOG.exception(_LE('Error destroying Volume Group'))
+            LOG.error(_LE('Cmd     :%s') % err.cmd)
+            LOG.error(_LE('StdOut  :%s') % err.stdout)
+            LOG.error(_LE('StdErr  :%s') % err.stderr)
+            raise
+
     def _get_vg_uuid(self):
         (out, _err) = self._execute('env', 'LC_ALL=C', 'vgs', '--noheadings',
                                     '-o uuid', self.vg_name)
@@ -698,6 +754,50 @@ class LVM(executor.Executor):
                           run_as_root=True)
         except putils.ProcessExecutionError as err:
             LOG.exception(_LE('Error renaming logical volume'))
+            LOG.error(_LE('Cmd     :%s') % err.cmd)
+            LOG.error(_LE('StdOut  :%s') % err.stdout)
+            LOG.error(_LE('StdErr  :%s') % err.stderr)
+            raise
+
+    def pv_resize(self, pv_name, new_size_str):
+        """Extend the size of an existing PV (for virtual PVs).
+
+        :raises: putils.ProcessExecutionError
+        """
+        try:
+            self._execute('pvresize',
+                          '--setphysicalvolumesize', new_size_str,
+                          pv_name,
+                          root_helper=self._root_helper,
+                          run_as_root=True)
+        except putils.ProcessExecutionError as err:
+            LOG.exception(_LE('Error resizing Physical Volume'))
+            LOG.error(_LE('Cmd     :%s') % err.cmd)
+            LOG.error(_LE('StdOut  :%s') % err.stdout)
+            LOG.error(_LE('StdErr  :%s') % err.stderr)
+            raise
+
+    def extend_thin_pool(self):
+        """Extend the size of the thin provisioning pool.
+
+        This method extends the size of a thin provisioning pool to 95% of the
+        size of the VG, if the VG is configured as thin and owns a thin
+        provisioning pool.
+
+        :raises: putils.ProcessExecutionError
+        """
+        if self.vg_thin_pool is None:
+            return
+
+        new_size_str = self._calculate_thin_pool_size()
+        try:
+            self._execute('lvextend',
+                          '-L', new_size_str,
+                          "%s/%s-pool" % (self.vg_name, self.vg_name),
+                          root_helper=self._root_helper,
+                          run_as_root=True)
+        except putils.ProcessExecutionError as err:
+            LOG.exception(_LE('Error extending thin provisioning pool'))
             LOG.error(_LE('Cmd     :%s') % err.cmd)
             LOG.error(_LE('StdOut  :%s') % err.stdout)
             LOG.error(_LE('StdErr  :%s') % err.stderr)
