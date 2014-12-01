@@ -20,10 +20,10 @@ a Scality storage platform.
 """
 
 from contextlib import nested
-import six
 import time
 
 from oslo.config import cfg
+import six
 
 from cinder.brick.local_dev import lvm
 from cinder import exception
@@ -463,7 +463,6 @@ class SRBDriver(driver.VolumeDriver):
                     LOG.warning(_LW("Could not attempt any recovery to"
                                     " retry the failed detach"))
 
-
     @synchronized('devices', 'cinder-srb-')
     def _detach_file(self, volume):
         name = self._get_volname(volume)
@@ -606,9 +605,8 @@ class SRBDriver(driver.VolumeDriver):
         """Deletes a snapshot."""
         with self.TempLVMDevice(self, snapshot) as dev:
             vg = dev.get_vg()
-            if self._volume_not_present(vg,
-                                        self._escape_snapshot(snapshot['name'])
-                                       ):
+            if self._volume_not_present(
+                    vg, self._escape_snapshot(snapshot['name'])):
                 # If the snapshot isn't present, then don't attempt to delete
                 LOG.warning(_LW("snapshot: %s not found, "
                                 "skipping delete operations")
