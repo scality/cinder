@@ -557,4 +557,5 @@ class SRBDriverTestCase(test.TestCase):
         self._driver.extend_volume(vol, new_size)
 
         new_vols = self._volumes
-        self.assertEqual(new_size * units.Gi, new_vols['volume-extend']['size'])
+        self.assertEqual(new_size * units.Gi,
+                         new_vols['volume-extend']['size'])
