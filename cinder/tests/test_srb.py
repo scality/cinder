@@ -16,8 +16,6 @@
 Unit tests for the Scality Rest Block Volume Driver.
 """
 
-from contextlib import nested
-
 import mock
 from oslo.concurrency import processutils
 
@@ -452,10 +450,10 @@ class SRBDriverTestCase(test.TestCase):
             self.assertDictMatch(old_vols, new_vols)
 
     def test_volume_create_from_snapshot(self):
-        with nested(
-            mock.patch('cinder.volume.utils.copy_volume'),
-            mock.patch('cinder.brick.local_dev.lvm.LVM.activate_lv'),
-        ) as (cp_vol, lv_activ):
+        cp_vol_patch = mock.patch('cinder.volume.utils.copy_volume')
+        lv_activ_patch = mock.patch('cinder.brick.local_dev.lvm.LVM.active_lv')
+
+        with cp_vol_patch as cp_vol, lv_activ_patch as lv_activ:
             old_vols = self._volumes
             newvol = {"name": "volume-SnapClone", "id": "SnapClone",
                       "size": 4 * units.Gi}
