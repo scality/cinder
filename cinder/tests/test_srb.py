@@ -134,6 +134,29 @@ class SRBDriverTestCase(test.TestCase):
         }
 
     def _fake_execute(self, *cmd, **kwargs):
+        def convert_size(s):
+            if isinstance(s, (int, long)):
+                return s
+
+            try:
+                return int(s)
+            except ValueError:
+                pass
+
+            conv_map = {
+                'g': units.Gi,
+                'G': units.Gi,
+                'm': units.Mi,
+                'M': units.Mi,
+                'k': units.Ki,
+                'K': units.Ki,
+            }
+
+            if s[-1] in conv_map:
+                return int(s[:-1]) * conv_map[s[-1]]
+
+            raise ValueError('Unknown size: %r' % s)
+
         cmd_string = ', '.join(cmd)
         data = "\n"
 
@@ -149,7 +172,7 @@ class SRBDriverTestCase(test.TestCase):
             volsize = cmd[2].split()[2]
             self._volumes[volname] = {
                 "name": volname,
-                "size": int(volsize),
+                "size": convert_size(volsize),
                 "vgs": {
                 },
             }
@@ -159,7 +182,7 @@ class SRBDriverTestCase(test.TestCase):
         elif '> /sys/class/srb/extend' in cmd_string:
             volname = cmd[2].split()[1]
             volsize = cmd[2].split()[2]
-            self._volumes[volname]["size"] = int(volsize)
+            self._volumes[volname]["size"] = convert_size(volsize)
         elif '> /sys/class/srb/attach' in cmd_string:
             pass
         elif '> /sys/class/srb/detach' in cmd_string:
