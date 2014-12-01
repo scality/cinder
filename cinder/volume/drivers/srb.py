@@ -371,7 +371,7 @@ class SRBDriver(driver.VolumeDriver):
             LOG.debug('Exit Code :%s' % err.exit_code)
             LOG.debug('StdOut    :%s' % err.stdout)
             LOG.debug('StdErr    :%s' % err.stderr)
-            msg = 'Could not destroy volume on any configured REST server'
+            message = 'Could not destroy volume on any configured REST server'
             LOG.error(message)
             raise exception.VolumeBackendAPIException(data=message)
 
