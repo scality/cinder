@@ -61,7 +61,7 @@ def retry(times=2, wait_before=False,
 
             while attempts_left != 0:
                 if attempts_left != times:
-                    LOG.warning("Retrying failed call: retry %i"
+                    LOG.warning(_LW("Retrying failed call: retry %i")
                                 % (times - attempts_left))
 
                 excepted = False
@@ -195,8 +195,8 @@ class SRBDriver(driver.VolumeDriver):
 
     def _setup_urls(self):
         if self.base_urls is None or not len(self.base_urls):
-            raise exception.VolumeBackendAPIException(
-                _LE("No url configured"))
+            message = "No url configured"
+            raise exception.VolumeBackendAPIException(data=message)
 
         try:
             cmd = 'echo ' + self.base_urls + ' > /sys/class/srb/add_urls'
@@ -224,8 +224,8 @@ class SRBDriver(driver.VolumeDriver):
             LOG.warning(_LW("Configuration variable srb_base_urls"
                             " not set or empty."))
         if self.urls_setup is False:
-            msg = _LE("Could not setup urls properly")
-            raise exception.VolumeBackendAPIException(data=msg)
+            message = "Could not setup urls properly"
+            raise exception.VolumeBackendAPIException(data=message)
 
     @staticmethod
     def _is_snapshot(volume):
@@ -292,10 +292,11 @@ class SRBDriver(driver.VolumeDriver):
             if not int(size_in_g):
                 return 1
         except ValueError:
-            msg = _LE("Invalid size parameter '%s': Cannot be interpreted"
-                      " as an integer value") % (size_in_g)
-            LOG.error(msg)
-            raise exception.VolumeBackendAPIException(msg)
+            message = ("Invalid size parameter '%s': Cannot be interpreted"
+                       " as an integer value"
+                       % (size_in_g))
+            LOG.error(message)
+            raise exception.VolumeBackendAPIException(data=message)
         return int(size_in_g)
 
     @staticmethod
@@ -334,9 +335,9 @@ class SRBDriver(driver.VolumeDriver):
             LOG.debug('Exit Code :%s' % err.exit_code)
             LOG.debug('StdOut    :%s' % err.stdout)
             LOG.debug('StdErr    :%s' % err.stderr)
-            msg = _LE('Could not create volume on any configured REST server')
-            LOG.error(msg)
-            raise exception.VolumeBackendAPIException(msg)
+            message = 'Could not create volume on any configured REST server'
+            LOG.error(message)
+            raise exception.VolumeBackendAPIException(data=message)
 
         return self._set_device_path(volume)
 
@@ -354,9 +355,9 @@ class SRBDriver(driver.VolumeDriver):
             LOG.debug('Exit Code :%s' % err.exit_code)
             LOG.debug('StdOut    :%s' % err.stdout)
             LOG.debug('StdErr    :%s' % err.stderr)
-            msg = _LE('Could not extend volume on any configured REST server')
-            LOG.error(msg)
-            raise exception.VolumeBackendAPIException(msg)
+            message = 'Could not extend volume on any configured REST server'
+            LOG.error(message)
+            raise exception.VolumeBackendAPIException(data=message)
 
     @staticmethod
     def _destroy_file(volume):
@@ -370,9 +371,9 @@ class SRBDriver(driver.VolumeDriver):
             LOG.debug('Exit Code :%s' % err.exit_code)
             LOG.debug('StdOut    :%s' % err.stdout)
             LOG.debug('StdErr    :%s' % err.stderr)
-            msg = _LE('Could not destroy volume on any configured REST server')
-            LOG.error(msg)
-            raise exception.VolumeBackendAPIException(msg)
+            msg = 'Could not destroy volume on any configured REST server'
+            LOG.error(message)
+            raise exception.VolumeBackendAPIException(data=message)
 
     # NOTE(joachim): Must only be called within a function decorated by:
     # @synchronized('devices', 'cinder-srb-')
@@ -431,11 +432,10 @@ class SRBDriver(driver.VolumeDriver):
                 LOG.debug('Exit Code :%s' % err.exit_code)
                 LOG.debug('StdOut    :%s' % err.stdout)
                 LOG.debug('StdErr    :%s' % err.stderr)
-                msg = _LE('Could not attach volume %(vol)s'
-                          ' as %(dev)s on system')\
-                    % {'vol': name, 'dev': devname}
+                msg = ('Could not attach volume %(vol)s as %(dev)s on system' %
+                       {'vol': name, 'dev': devname})
                 LOG.error(msg)
-                raise exception.VolumeBackendAPIException(msg)
+                raise exception.VolumeBackendAPIException(data=msg)
 
         self._increment_attached_count(volume)
 
