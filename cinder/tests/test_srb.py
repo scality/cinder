@@ -449,7 +449,8 @@ class SRBDriverTestCase(test.TestCase):
 
     def test_volume_create_from_snapshot(self):
         cp_vol_patch = mock.patch('cinder.volume.utils.copy_volume')
-        lv_activ_patch = mock.patch('cinder.brick.local_dev.lvm.LVM.active_lv')
+        lv_activ_patch = mock.patch(
+            'cinder.brick.local_dev.lvm.LVM.activate_lv')
 
         with cp_vol_patch as cp_vol, lv_activ_patch as lv_activ:
             old_vols = self._volumes
