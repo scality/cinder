@@ -22,18 +22,18 @@ a Scality storage platform.
 from contextlib import nested
 import time
 
+from oslo.concurrency.lockutils import synchronized
 from oslo.concurrency import processutils as putils
 from oslo.config import cfg
+from oslo.utils import excutils
+from oslo.utils import units
 import six
 
 from cinder.brick.local_dev import lvm
 from cinder import exception
 from cinder.i18n import _LI, _LE, _LW
 from cinder.image import image_utils
-from cinder.openstack.common import excutils
-from cinder.openstack.common.lockutils import synchronized
 from cinder.openstack.common import log as logging
-from cinder.openstack.common import units
 from cinder import utils
 from cinder.volume import driver
 from cinder.volume import utils as volutils
