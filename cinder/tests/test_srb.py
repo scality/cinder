@@ -50,8 +50,8 @@ class SRBRetryTestCase(test.TestCase):
 
         ret = _try_failing(self)
 
-        self.assertEqual(ret, False)
-        self.assertEqual(self.attempts, expected_attempts)
+        self.assertEqual(False, ret)
+        self.assertEqual(expected_attempts, self.attempts)
 
     def test_retry_fail_by_exception(self):
         expected_attempts = 2
@@ -69,8 +69,8 @@ class SRBRetryTestCase(test.TestCase):
         except processutils.ProcessExecutionError:
             pass
 
-        self.assertEqual(ret, None)
-        self.assertEqual(self.attempts, expected_attempts)
+        self.assertEqual(None, ret)
+        self.assertEqual(expected_attempts, self.attempts)
 
     def test_retry_fail_and_succeed_mixed(self):
 
@@ -88,8 +88,8 @@ class SRBRetryTestCase(test.TestCase):
 
         ret = _try_failing(self)
 
-        self.assertEqual(ret, 34)
-        self.assertEqual(self.attempts, 4)
+        self.assertEqual(34, ret)
+        self.assertEqual(4, self.attempts)
 
 
 class SRBDriverTestCase(test.TestCase):
@@ -353,7 +353,7 @@ class SRBDriverTestCase(test.TestCase):
     def test_setup(self):
         """The url shall be added automatically"""
         self._driver.do_setup(None)
-        self.assertEqual(self._urls[0], "http://localhost/volumes")
+        self.assertEqual('http://localhost/volumes', self._urls[0])
         self._driver.check_for_setup_error()
 
     def test_setup_no_config(self):
@@ -369,8 +369,7 @@ class SRBDriverTestCase(test.TestCase):
         volume = {'name': 'volume-test', 'id': 'test', 'size': 4 * units.Gi}
         old_vols = self._volumes
         updates = self._driver.create_volume(volume)
-        self.assertEqual(updates,
-                         {'provider_location': volume['name']})
+        self.assertEqual({'provider_location': volume['name']}, updates)
         new_vols = self._volumes
         old_vols['volume-test'] = {
             'name': 'volume-test',
@@ -409,8 +408,7 @@ class SRBDriverTestCase(test.TestCase):
                   'size': 4 * units.Gi}
         old_vols = self._volumes
         updates = self._driver.create_volume(volume)
-        self.assertEqual(updates,
-                         {'provider_location': volume['name']})
+        self.assertEqual({'provider_location': volume['name']}, updates)
         self._driver.delete_volume(volume)
         new_vols = self._volumes
         self.assertDictMatch(old_vols, new_vols)
@@ -467,8 +465,8 @@ class SRBDriverTestCase(test.TestCase):
                 mock.call(srcsnap['volume_name'] + "-pool"),
                 mock.call(srcsnap['name'], True)
             ]
-            lv_activ.assertEqual(lv_activ.call_args_list,
-                                 expected_lv_activ_calls)
+            lv_activ.assertEqual(expected_lv_activ_calls,
+                                 lv_activ.call_args_list)
             cp_vol.assert_called_with(
                 '/dev/mapper/volume--SnapBase-_snapshot--SnappedBase',
                 '/dev/mapper/volume--SnapClone-volume--SnapClone',
@@ -559,5 +557,4 @@ class SRBDriverTestCase(test.TestCase):
         self._driver.extend_volume(vol, new_size)
 
         new_vols = self._volumes
-        self.assertEqual(new_vols['volume-extend']['size'],
-                         new_size * units.Gi)
+        self.assertEqual(new_size * units.Gi, new_vols['volume-extend']['size'])
