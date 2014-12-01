@@ -22,6 +22,7 @@ a Scality storage platform.
 from contextlib import nested
 import time
 
+from oslo.concurrency import processutils as putils
 from oslo.config import cfg
 import six
 
@@ -32,7 +33,6 @@ from cinder.image import image_utils
 from cinder.openstack.common import excutils
 from cinder.openstack.common.lockutils import synchronized
 from cinder.openstack.common import log as logging
-from cinder.openstack.common import processutils as putils
 from cinder.openstack.common import units
 from cinder import utils
 from cinder.volume import driver
