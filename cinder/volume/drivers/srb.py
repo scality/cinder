@@ -19,7 +19,6 @@ It is a Kernel Block Driver relying on a REST Protocol to store the data on
 a Scality storage platform.
 """
 
-from contextlib import nested
 import time
 
 from oslo.concurrency.lockutils import synchronized
@@ -533,8 +532,8 @@ class SRBDriver(driver.VolumeDriver):
         updates = self._create_file(dstvol)
 
         # We need devices attached for IO operations.
-        with nested(self.TempLVMDevice(self, srcvol),
-                    self.TempRawDevice(self, dstvol)) as (srcdev, dstdev):
+        with self.TempLVMDevice(self, srcvol) as srcdev, \
+                self.TempRawDevice(self, dstvol) as dstdev:
             self._setup_lvm(dstvol)
 
             # Some configurations of LVM do not automatically activate
