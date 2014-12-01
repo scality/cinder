@@ -533,7 +533,7 @@ class SRBDriver(driver.VolumeDriver):
 
         # We need devices attached for IO operations.
         with self.TempLVMDevice(self, srcvol) as srcdev, \
-                self.TempRawDevice(self, dstvol) as dstdev:
+                self.TempRawDevice(self, dstvol):
             self._setup_lvm(dstvol)
 
             # Some configurations of LVM do not automatically activate
