@@ -43,7 +43,7 @@ class SRBRetryTestCase(test.TestCase):
     def test_retry_fail_by_return(self):
         expected_attempts = 2
 
-        @srb.retry(times=expected_attempts, success=True)
+        @srb.retry(exceptions=(), times=expected_attempts, success=True)
         def _try_failing(self):
             self.attempts = self.attempts + 1
             return False

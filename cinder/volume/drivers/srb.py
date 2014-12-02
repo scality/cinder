@@ -51,9 +51,8 @@ CONF = cfg.CONF
 CONF.register_opts(srb_opts)
 
 
-def retry(times=2, wait_before=False,
-          base_wait=1, increase='increment', success=None,
-          exceptions=()):
+def retry(exceptions, times=2, wait_before=False,
+          base_wait=1, increase='increment', success=None):
     def wrapper(func, *args, **kwargs):
         ret = None
         attempts_left = times
@@ -442,13 +441,13 @@ class SRBDriver(driver.VolumeDriver):
 
         self._increment_attached_count(volume)
 
-    @retry(times=3, wait_before=True, base_wait=5, increase='increment',
-           exceptions=(putils.ProcessExecutionError))
+    @retry(exceptions=(putils.ProcessExecutionError, ),
+           times=3, wait_before=True, base_wait=5, increase='increment')
     def _do_deactivate(self, volume, vg):
         vg.deactivate_vg()
 
-    @retry(times=5, wait_before=True, base_wait=1, increase='double',
-           exceptions=(putils.ProcessExecutionError))
+    @retry(exceptions=(putils.ProcessExecutionError, ),
+           times=5, wait_before=True, base_wait=1, increase='double')
     def _do_detach(self, volume, vg):
         devname = self._device_name(volume)
         volname = self._get_volname(volume)
