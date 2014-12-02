@@ -13,10 +13,10 @@
 #    under the License.
 
 """
-Scality's Rest Block Volume Driver.
+Volume driver for the Scality REST Block storage system
 
-It is a Kernel Block Driver relying on a REST Protocol to store the data on
-a Scality storage platform.
+This driver provisions Linux SRB volumes leveraging RESTful storage platforms
+(e.g. Scality CDMI).
 """
 
 import time
