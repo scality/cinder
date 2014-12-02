@@ -19,6 +19,7 @@ This driver provisions Linux SRB volumes leveraging RESTful storage platforms
 (e.g. Scality CDMI).
 """
 
+import functools
 import time
 
 from oslo.concurrency.lockutils import synchronized
@@ -53,46 +54,50 @@ CONF.register_opts(srb_opts)
 def retry(times=2, wait_before=False,
           base_wait=1, increase='increment', success=None,
           exceptions=()):
+    def wrapper(func, *args, **kwargs):
+        ret = None
+        attempts_left = times
+        wtime = base_wait
+
+        while attempts_left != 0:
+            if attempts_left != times:
+                LOG.warning(_LW("Retrying failed call: retry %i")
+                            % (times - attempts_left))
+
+            excepted = False
+            attempts_left = attempts_left - 1
+            try:
+                LOG.debug("Trying attempt #%i" % (times - attempts_left))
+                ret = func(*args, **kwargs)
+            except exceptions:
+                excepted = True
+                if attempts_left == 0:
+                    raise
+
+            # Allow both case to be considered as success:
+            # - No ret value expected, No exception raised
+            # - Ret value expected, success identified
+            if (success is None and excepted is False)\
+                    or (success is not None and ret == success):
+                break
+
+            if wait_before and attempts_left != 0:
+                time.sleep(wtime)
+                if increase == 'increment':
+                    wtime = wtime + base_wait
+                elif increase == 'double':
+                    wtime = wtime * 2
+
+        if success is not None:
+            return ret
+        return
+
     def decorator(func):
-        def wrapper(*args, **kwargs):
-            ret = None
-            attempts_left = times
-            wtime = base_wait
+        @functools.wraps(func)
+        def wrapped(*args, **kwargs):
+            return wrapper(func, *args, **kwargs)
 
-            while attempts_left != 0:
-                if attempts_left != times:
-                    LOG.warning(_LW("Retrying failed call: retry %i")
-                                % (times - attempts_left))
-
-                excepted = False
-                attempts_left = attempts_left - 1
-                try:
-                    LOG.debug("Trying attempt #%i" % (times - attempts_left))
-                    ret = func(*args, **kwargs)
-                except exceptions:
-                    excepted = True
-                    if attempts_left == 0:
-                        raise
-
-                # Allow both case to be considered as success:
-                # - No ret value expected, No exception raised
-                # - Ret value expected, success identified
-                if (success is None and excepted is False)\
-                        or (success is not None and ret == success):
-                    break
-
-                if wait_before and attempts_left != 0:
-                    time.sleep(wtime)
-                    if increase == 'increment':
-                        wtime = wtime + base_wait
-                    elif increase == 'double':
-                        wtime = wtime * 2
-
-            if success is not None:
-                return ret
-            return
-
-        return wrapper
+        return wrapped
 
     return decorator
 
