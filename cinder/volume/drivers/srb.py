@@ -52,43 +52,56 @@ CONF = cfg.CONF
 CONF.register_opts(srb_opts)
 
 
-def retry(exceptions, times=2, wait_before=False, base_wait=1,
-          increase='increment'):
-    def wrapper(func, *args, **kwargs):
-        sleep_time = base_wait
-        exc_info = None
+class retry:
+    SLEEP_NONE = 'none'
+    SLEEP_DOUBLE = 'double'
+    SLEEP_INCREMENT = 'increment'
 
-        for attempt in xrange(times):
-            if attempt != 0:
-                LOG.warning(_LW("Retrying failed call: attempt %i")
-                            % attempt)
+    def __init__(self, exceptions, count, sleep_mechanism=SLEEP_INCREMENT,
+                 sleep_factor=1):
+        if sleep_mechanism not in [self.SLEEP_NONE,
+                                   self.SLEEP_DOUBLE,
+                                   self.SLEEP_INCREMENT]:
+            raise ValueError('Invalid value for `sleep_mechanism` argument')
 
-            try:
-                LOG.debug("Trying attempt #%i" % attempt)
-                return func(*args, **kwargs)
-            except exceptions:
-                exc_info = sys.exc_info()
+        self._exceptions = exceptions
+        self._count = count
+        self._sleep_mechanism = sleep_mechanism
+        self._sleep_factor = sleep_factor
 
-            if wait_before and attempt != times - 1:
-                time.sleep(sleep_time)
-                if increase == 'increment':
-                    sleep_time += base_wait
-                elif increase == 'double':
-                    sleep_time *= 2
-                else:
-                    raise ValueError('Unknown `increase` mechanism')
-
-        raise exc_info[0], exc_info[1], exc_info[2]
-
-
-    def decorator(func):
-        @functools.wraps(func)
+    def __call__(self, fun):
+        @functools.wraps(fun)
         def wrapped(*args, **kwargs):
-            return wrapper(func, *args, **kwargs)
+            sleep_time = self._sleep_factor
+            exc_info = None
+
+            for attempt in xrange(self._count):
+                if attempt != 0:
+                    LOG.warning(_LW("Retrying failed call, attempt %i")
+                                % attempt)
+
+                try:
+                    return fun(*args, **kwargs)
+                except self._exceptions:
+                    exc_info = sys.exc_info()
+
+                if attempt != self._count - 1:
+                    if self._sleep_mechanism == self.SLEEP_NONE:
+                        continue
+                    elif self._sleep_mechanism == self.SLEEP_INCREMENT:
+                        time.sleep(sleep_time)
+                        sleep_time += self._sleep_factor
+                    elif self._sleep_mechanism == self.SLEEP_DOUBLE:
+                        time.sleep(sleep_time)
+                        sleep_time *= 2
+                    else:
+                        raise ValueError('Unknown sleep mechanism: %r'
+                                         % self._sleep_mechanism)
+
+            raise exc_info[0], exc_info[1], exc_info[2]
 
         return wrapped
 
-    return decorator
 
 
 class SRBDriver(driver.VolumeDriver):
@@ -434,12 +447,12 @@ class SRBDriver(driver.VolumeDriver):
         self._increment_attached_count(volume)
 
     @retry(exceptions=(putils.ProcessExecutionError, ),
-           times=3, wait_before=True, base_wait=5, increase='increment')
+           count=3, sleep_mechanism=retry.SLEEP_INCREMENT, sleep_factor=5)
     def _do_deactivate(self, volume, vg):
         vg.deactivate_vg()
 
     @retry(exceptions=(putils.ProcessExecutionError, ),
-           times=5, wait_before=True, base_wait=1, increase='double')
+           count=5, sleep_mechanism=retry.SLEEP_DOUBLE, sleep_factor=1)
     def _do_detach(self, volume, vg):
         devname = self._device_name(volume)
         volname = self._get_volname(volume)

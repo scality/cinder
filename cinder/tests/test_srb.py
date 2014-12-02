@@ -43,7 +43,7 @@ class SRBRetryTestCase(test.TestCase):
     def test_retry_no_failure(self):
         expected_attempts = 1
 
-        @srb.retry(exceptions=(), times=expected_attempts)
+        @srb.retry(exceptions=(), count=expected_attempts)
         def _try_failing(self):
             self.attempts = self.attempts + 1
             return True
@@ -57,7 +57,7 @@ class SRBRetryTestCase(test.TestCase):
         expected_attempts = 2
         ret = None
 
-        @srb.retry(times=expected_attempts,
+        @srb.retry(count=expected_attempts,
                    exceptions=(processutils.ProcessExecutionError))
         def _try_failing(self):
             self.attempts = self.attempts + 1
@@ -74,7 +74,7 @@ class SRBRetryTestCase(test.TestCase):
 
     def test_retry_fail_and_succeed_mixed(self):
 
-        @srb.retry(times=4, exceptions=(Exception))
+        @srb.retry(count=4, exceptions=(Exception))
         def _try_failing(self):
             attempted = self.attempts
             self.attempts = self.attempts + 1
