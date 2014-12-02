@@ -40,17 +40,17 @@ class SRBRetryTestCase(test.TestCase):
         super(SRBRetryTestCase, self).setUp()
         self.attempts = 0
 
-    def test_retry_fail_by_return(self):
-        expected_attempts = 2
+    def test_retry_no_failure(self):
+        expected_attempts = 1
 
-        @srb.retry(exceptions=(), times=expected_attempts, success=True)
+        @srb.retry(exceptions=(), times=expected_attempts)
         def _try_failing(self):
             self.attempts = self.attempts + 1
-            return False
+            return True
 
         ret = _try_failing(self)
 
-        self.assertEqual(False, ret)
+        self.assertEqual(True, ret)
         self.assertEqual(expected_attempts, self.attempts)
 
     def test_retry_fail_by_exception(self):
@@ -74,16 +74,16 @@ class SRBRetryTestCase(test.TestCase):
 
     def test_retry_fail_and_succeed_mixed(self):
 
-        @srb.retry(times=4, success=34, exceptions=(Exception))
+        @srb.retry(times=4, exceptions=(Exception))
         def _try_failing(self):
             attempted = self.attempts
             self.attempts = self.attempts + 1
             if attempted == 0:
-                return False
+                raise IOError(0, 'Oops')
             if attempted == 1:
                 raise Exception("Second try shall except")
             if attempted == 2:
-                return True
+                assert False
             return 34
 
         ret = _try_failing(self)

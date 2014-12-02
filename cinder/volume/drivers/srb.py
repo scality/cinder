@@ -20,6 +20,7 @@ This driver provisions Linux SRB volumes leveraging RESTful storage platforms
 """
 
 import functools
+import sys
 import time
 
 from oslo.concurrency.lockutils import synchronized
@@ -51,43 +52,34 @@ CONF = cfg.CONF
 CONF.register_opts(srb_opts)
 
 
-def retry(exceptions, times=2, wait_before=False,
-          base_wait=1, increase='increment', success=None):
+def retry(exceptions, times=2, wait_before=False, base_wait=1,
+          increase='increment'):
     def wrapper(func, *args, **kwargs):
-        ret = None
-        attempts_left = times
-        wtime = base_wait
+        sleep_time = base_wait
+        exc_info = None
 
-        while attempts_left != 0:
-            if attempts_left != times:
-                LOG.warning(_LW("Retrying failed call: retry %i")
-                            % (times - attempts_left))
+        for attempt in xrange(times):
+            if attempt != 0:
+                LOG.warning(_LW("Retrying failed call: attempt %i")
+                            % attempt)
 
-            excepted = False
-            attempts_left -= 1
             try:
-                LOG.debug("Trying attempt #%i" % (times - attempts_left))
-                ret = func(*args, **kwargs)
+                LOG.debug("Trying attempt #%i" % attempt)
+                return func(*args, **kwargs)
             except exceptions:
-                excepted = True
-                if attempts_left == 0:
-                    raise
+                exc_info = sys.exc_info()
 
-            # Allow both case to be considered as success:
-            # - No ret value expected, No exception raised
-            # - Ret value expected, success identified
-            if (success is None and excepted is False)\
-                    or (success is not None and ret == success):
-                break
-
-            if wait_before and attempts_left != 0:
-                time.sleep(wtime)
+            if wait_before and attempt != times - 1:
+                time.sleep(sleep_time)
                 if increase == 'increment':
-                    wtime = wtime + base_wait
+                    sleep_time += base_wait
                 elif increase == 'double':
-                    wtime = wtime * 2
+                    sleep_time *= 2
+                else:
+                    raise ValueError('Unknown `increase` mechanism')
 
-        return ret
+        raise exc_info[0], exc_info[1], exc_info[2]
+
 
     def decorator(func):
         @functools.wraps(func)
