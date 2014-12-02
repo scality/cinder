@@ -65,7 +65,7 @@ def retry(times=2, wait_before=False,
                             % (times - attempts_left))
 
             excepted = False
-            attempts_left = attempts_left - 1
+            attempts_left -= 1
             try:
                 LOG.debug("Trying attempt #%i" % (times - attempts_left))
                 ret = func(*args, **kwargs)
@@ -88,9 +88,7 @@ def retry(times=2, wait_before=False,
                 elif increase == 'double':
                     wtime = wtime * 2
 
-        if success is not None:
-            return ret
-        return
+        return ret
 
     def decorator(func):
         @functools.wraps(func)
@@ -103,11 +101,11 @@ def retry(times=2, wait_before=False,
 
 
 class SRBDriver(driver.VolumeDriver):
-    """REST Block Driver's cinder driver.
+    """Scality SRB volume driver
 
-    Creates and manages volume files on a REST-based storage service
-    for hypervisors to use as block devices through a native linux
-    Loadable Kernel Module.
+    This driver manages volumes provisioned by the Scality REST Block driver
+    Linux kernel module, backed by RESTful storage providers (e.g. Scality
+    CDMI).
     """
 
     VERSION = '0.1.0'
