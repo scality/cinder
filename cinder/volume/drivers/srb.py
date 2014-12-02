@@ -657,7 +657,7 @@ class SRBDriver(driver.VolumeDriver):
         with self.TempLVMDevice(self, volume) as dev:
             vg = dev.get_vg()
             vg.pv_resize(self._device_path(volume), new_size_str)
-            vg.extend_thinpool()
+            vg.extend_thin_pool()
             vg.extend_volume(volume['name'], new_size_str)
 
 
