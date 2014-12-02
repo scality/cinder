@@ -19,6 +19,7 @@ This driver provisions Linux SRB volumes leveraging RESTful storage platforms
 (e.g. Scality CDMI).
 """
 
+import contextlib
 import functools
 import sys
 import time
@@ -103,6 +104,20 @@ class retry:
         return wrapped
 
 
+@contextlib.contextmanager
+def patched(obj, attr, fun):
+    orig = getattr(obj, attr)
+
+    def patch(*args, **kwargs):
+        return fun(orig, *args, **kwargs)
+
+    setattr(obj, attr, patch)
+
+    try:
+        yield
+    finally:
+        setattr(obj, attr, orig)
+
 
 class SRBDriver(driver.VolumeDriver):
     """Scality SRB volume driver
@@ -179,26 +194,6 @@ class SRBDriver(driver.VolumeDriver):
         self.backend_name = None
         self.base_urls = None
         self._attached_devices = {}
-
-        # NOTE(joachim): Work-around some LVM behavior by monkey-patching
-        self._original_lv_activate = lvm.LVM.activate_lv
-        lvm.LVM.activate_lv = self._wrap_lv_activate()
-
-    # NOTE(joachim)
-    # This is a monkey-patching decorator used to wrap the activate_lv call
-    # in order for the LVM class's init to succeed when the lv was already
-    # activated (instead of failing miserably when the error could be
-    # ignored)
-    # summarized: Make brick's lvm activate_lv consider EEXIST as Success
-    def _wrap_lv_activate(self):
-        def activate(vg, *args, **kwargs):
-            try:
-                self._original_lv_activate(vg, *args, **kwargs)
-            except putils.ProcessExecutionError as err:
-                if err.exit_code != 5:
-                    raise
-
-        return activate
 
     def _setup_urls(self):
         if self.base_urls is None or not len(self.base_urls):
@@ -318,9 +313,22 @@ class SRBDriver(driver.VolumeDriver):
         # Get origin volume name even for snapshots
         volume_name = self._get_volname(volume)
         physical_volumes = [self._device_path(volume)]
-        return lvm.LVM(volume_name, utils.get_root_helper(),
-                       create_vg=create_vg, physical_volumes=physical_volumes,
-                       lvm_type='thin', executor=self._execute)
+
+        # Patch `lvm.LVM.activate_lv` in order to let the `lvm.LVM` constructor
+        # succeed, even when the LV is already activated.
+
+        def activate_lv(orig, *args, **kwargs):
+            try:
+                orig(*args, **kwargs)
+            except putils.ProcessExecutionError as exc:
+                if exc.exit_code != 5:
+                    raise
+
+        with patched(lvm.LVM, 'activate_lv', activate_lv):
+            return lvm.LVM(volume_name, utils.get_root_helper(),
+                           create_vg=create_vg,
+                           physical_volumes=physical_volumes,
+                           lvm_type='thin', executor=self._execute)
 
     @staticmethod
     def _volume_not_present(vg, volume_name):
