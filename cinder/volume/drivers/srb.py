@@ -106,6 +106,15 @@ class retry:
 
 @contextlib.contextmanager
 def patched(obj, attr, fun):
+    '''Context manager to locally patch a method.
+
+    Within the managed context, the `attr` method of `obj` will be replaced by a
+    method which calls `fun` passing in the original `attr` attribute of `obj`
+    as well as any positional and keyword arguments.
+
+    At the end of the context, the original method is restored.
+    '''
+
     orig = getattr(obj, attr)
 
     def patch(*args, **kwargs):
