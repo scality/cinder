@@ -78,8 +78,8 @@ class retry:
 
             for attempt in xrange(self._count):
                 if attempt != 0:
-                    LOG.warning(_LW("Retrying failed call, attempt %i")
-                                % attempt)
+                    LOG.warning(_LW("Retrying failed call, attempt %i"),
+                                attempt)
 
                 try:
                     return fun(*args, **kwargs)
@@ -335,8 +335,7 @@ class SRBDriver(driver.VolumeDriver):
 
     @staticmethod
     def _activate_lv(orig, *args, **kwargs):
-        '''
-        Use with `patched` to patch `lvm.LVM.activate_lv` to ignore `EEXIST`
+        '''Use with `patched` to patch `lvm.LVM.activate_lv` to ignore `EEXIST`
         '''
         try:
             orig(*args, **kwargs)
@@ -448,7 +447,7 @@ class SRBDriver(driver.VolumeDriver):
     def _attach_file(self, volume):
         name = self._get_volname(volume)
         devname = self._device_name(volume)
-        LOG.debug('Attaching volume %s as %s' % (name, devname))
+        LOG.debug('Attaching volume %s as %s', name, devname)
 
         count = self._get_attached_count(volume)
         if count == 0:
@@ -495,7 +494,7 @@ class SRBDriver(driver.VolumeDriver):
         name = self._get_volname(volume)
         devname = self._device_name(volume)
         vg = self._get_lvm_vg(volume)
-        LOG.debug('Detaching device %s' % (devname))
+        LOG.debug('Detaching device %s', devname)
 
         count = self._get_attached_count(volume)
         if count > 1:
@@ -538,14 +537,15 @@ class SRBDriver(driver.VolumeDriver):
         vg = self._get_lvm_vg(volume)
         if vg.lv_has_snapshot(volume['name']):
             LOG.error(_LE('Unable to delete due to existing snapshot '
-                          'for volume: %s') % volume['name'])
+                          'for volume: %s'),
+                      volume['name'])
             raise exception.VolumeIsBusy(volume_name=volume['name'])
         vg.destroy_vg()
         # NOTE(joachim) Force lvm vg flush through a vgs command
         vgs = vg.get_all_volume_groups(root_helper='sudo', vg_name=vg.vg_name)
         if len(vgs) != 0:
-            LOG.warning(_LW('Removed volume group %s still appears in vgs')
-                        % vg.vg_name)
+            LOG.warning(_LW('Removed volume group %s still appears in vgs'),
+                        vg.vg_name)
 
     def _create_n_copy_volume(self, dstvol, srcvol):
         """Creates a volume from a volume or a snapshot."""
@@ -588,7 +588,7 @@ class SRBDriver(driver.VolumeDriver):
 
     def create_cloned_volume(self, volume, src_vref):
         """Creates a clone of the specified volume."""
-        LOG.info(_LI('Creating clone of volume: %s') % src_vref['id'])
+        LOG.info(_LI('Creating clone of volume: %s'), src_vref['id'])
 
         updates = None
         with temp_lvm_device(self, src_vref):
@@ -606,8 +606,8 @@ class SRBDriver(driver.VolumeDriver):
                 self._destroy_lvm(volume)
             self._detach_file(volume)
 
-        LOG.debug('Deleting volume %s, attached=%s'
-                  % (volume['name'], attached))
+        LOG.debug('Deleting volume %s, attached=%s',
+                  volume['name'], attached)
 
         self._destroy_file(volume)
 
@@ -626,8 +626,8 @@ class SRBDriver(driver.VolumeDriver):
                     vg, self._escape_snapshot(snapshot['name'])):
                 # If the snapshot isn't present, then don't attempt to delete
                 LOG.warning(_LW("snapshot: %s not found, "
-                                "skipping delete operations")
-                            % snapshot['name'])
+                                "skipping delete operations"),
+                            snapshot['name'])
                 return
 
             vg.delete(self._escape_snapshot(snapshot['name']))
@@ -679,11 +679,11 @@ class SRBDriver(driver.VolumeDriver):
 
 
 class SRBISCSIDriver(SRBDriver, driver.ISCSIDriver):
-    """Scality Rest Block's cinder driver with ISCSI export.
+    """Scality SRB volume driver with ISCSI support
 
-    Creates and manages volume files on a REST-based storage service
-    for hypervisors to use as block devices through a native linux
-    Loadable Kernel Module, and export them through ISCSI to nova.
+    This driver manages volumes provisioned by the Scality REST Block driver
+    Linux kernel module, backed by RESTful storage providers (e.g. Scality
+    CDMA), and exports them through ISCSI to Nova.
     """
 
     VERSION = '0.1.0'
@@ -751,6 +751,7 @@ class SRBISCSIDriver(SRBDriver, driver.ISCSIDriver):
             self.target_helper.remove_export(context, volume)
             self._detach_file(volume)
         except exception.NotFound:
-            pass
-        except Exception:
-            pass
+            LOG.warning(_LW('Volume %r not found while trying to remove'),
+                        volume['id'])
+        except Exception as exc:
+            LOG.warning(_LW('Error while removing export: %r'), exc)
