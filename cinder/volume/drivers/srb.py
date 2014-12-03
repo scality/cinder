@@ -24,7 +24,10 @@ import functools
 import sys
 import time
 
-from oslo.concurrency.lockutils import synchronized
+try:
+    from oslo_concurrency.lockutils import synchronized
+except ImportError:
+    from oslo.concurrency.lockutils import synchronized
 from oslo.concurrency import processutils as putils
 from oslo.config import cfg
 from oslo.utils import excutils
