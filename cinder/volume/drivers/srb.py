@@ -316,15 +316,13 @@ class SRBDriver(driver.VolumeDriver):
     @staticmethod
     def _size_int(size_in_g):
         try:
-            if not int(size_in_g):
-                return 1
+            return max(int(size_in_g), 1)
         except ValueError:
             message = ("Invalid size parameter '%s': Cannot be interpreted"
                        " as an integer value"
                        % (size_in_g))
             LOG.error(message)
             raise exception.VolumeBackendAPIException(data=message)
-        return int(size_in_g)
 
     @classmethod
     def _set_device_path(cls, volume):
