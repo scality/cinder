@@ -370,9 +370,10 @@ class SRBDriver(driver.VolumeDriver):
                 message=message,
                 info_message=_LI('Error creating Volume'),
                 reraise=exception.VolumeBackendAPIException(data=message)):
+            size = self._size_int(volume['size']) * self.OVER_ALLOC_RATIO
+
             cmd = 'echo ' + volume['name'] + ' '
-            cmd += str(self._size_int(volume['size'])
-                       * self.OVER_ALLOC_RATIO) + 'G'
+            cmd += '%dG' % size
             cmd += ' > /sys/class/srb/create'
             putils.execute('/bin/sh', '-c', cmd,
                            root_helper='sudo', run_as_root=True)
@@ -386,9 +387,10 @@ class SRBDriver(driver.VolumeDriver):
                 message=message,
                 info_message=_LI('Error extending Volume'),
                 reraise=exception.VolumeBackendAPIException(data=message)):
+            size = self._size_int(new_size) * self.OVER_ALLOC_RATIO
+
             cmd = 'echo ' + volume['name'] + ' '
-            cmd += str(self._size_int(new_size)
-                       * self.OVER_ALLOC_RATIO) + 'G'
+            cmd += '%dG' % size
             cmd += ' > /sys/class/srb/extend'
             putils.execute('/bin/sh', '-c', cmd,
                            root_helper='sudo', run_as_root=True)
@@ -528,8 +530,8 @@ class SRBDriver(driver.VolumeDriver):
 
     def _setup_lvm(self, volume):
         # NOTE(joachim): One-device volume group to manage thin snapshots
-        size_str = str(self._size_int(volume['size'])
-                       * self.OVER_ALLOC_RATIO) + 'g'
+        size = self._size_int(volume['size']) * self.OVER_ALLOC_RATIO
+        size_str = '%dg' % size
         vg = self._get_lvm_vg(volume, create_vg=True)
         vg.create_volume(volume['name'], size_str, lv_type='thin')
 
@@ -669,8 +671,8 @@ class SRBDriver(driver.VolumeDriver):
                                       self._mapper_path(volume))
 
     def extend_volume(self, volume, new_size):
-        new_size_str = str(self._size_int(new_size)
-                           * self.OVER_ALLOC_RATIO) + 'g'
+        new_alloc_size = self._size_int(new_size) * self.OVER_ALLOC_RATIO
+        new_size_str = '%dg' % new_alloc_size
         self._extend_file(volume, new_size)
         with temp_lvm_device(self, volume) as vg:
             vg.pv_resize(self._device_path(volume), new_size_str)
