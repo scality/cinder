@@ -161,7 +161,7 @@ def handle_process_execution_error(message, info_message, reraise=True):
         LOG.debug('StdErr    : %s', exc.stderr)
 
         if reraise is True:
-            raise exc
+            raise
         elif reraise:
             raise reraise
 
