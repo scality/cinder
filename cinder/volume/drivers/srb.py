@@ -128,6 +128,44 @@ def patched(obj, attr, fun):
         setattr(obj, attr, orig)
 
 
+@contextlib.contextmanager
+def handle_process_execution_error(message, info_message, reraise=True):
+    '''Consistently handle `putils.ProcessExecutionError` exceptions
+
+    This context-manager will catch any `putils.ProcessExecutionError`
+    exceptions raised in the managed block, and generate logging output
+    accordingly.
+
+    The value of the `message` argument will be logged at `logging.ERROR`
+    level, and the `info_message` argument at `logging.INFO` level. Finally
+    the command string, exit code, standard output and error output of the
+    process will be logged at `logging.DEBUG` level.
+
+    The `reraise` argument specifies what should happend when a
+    `putils.ProcessExecutionError` is caught. If it's equal to `True`, the
+    exception will be re-raised. If it's some other non-`False` object, this
+    object will be raised instead (so you most likely want it to be some
+    `Exception`). Any `False` value will result in the exception to be
+    swallowed.
+    '''
+
+    try:
+        yield
+    except putils.ProcessExecutionError as exc:
+        LOG.error(message)
+
+        LOG.info(info_message)
+        LOG.debug('Command   : %s', exc.cmd)
+        LOG.debug('Exit Code : %r', exc.exit_code)
+        LOG.debug('StdOut    : %s', exc.stdout)
+        LOG.debug('StdErr    : %s', exc.stderr)
+
+        if reraise == True:
+            raise exc
+        elif reraise:
+            raise reraise
+
+
 class SRBDriver(driver.VolumeDriver):
     """Scality SRB volume driver
 
@@ -209,19 +247,14 @@ class SRBDriver(driver.VolumeDriver):
             message = "No url configured"
             raise exception.VolumeBackendAPIException(data=message)
 
-        try:
+        with handle_process_execution_error(
+                message=_LE('Cound not setup urks on the Block Driver'),
+                info_message=_LI('Error creating Volume'),
+                reraise=False):
             cmd = 'echo ' + self.base_urls + ' > /sys/class/srb/add_urls'
             putils.execute('sh', '-c', cmd,
                            root_helper='sudo', run_as_root=True)
             self.urls_setup = True
-        except putils.ProcessExecutionError as err:
-            LOG.debug('Error creating Volume')
-            LOG.debug('Cmd       :%s' % err.cmd)
-            LOG.debug('Exit Code :%s' % err.exit_code)
-            LOG.debug('StdOut    :%s' % err.stdout)
-            LOG.debug('StdErr    :%s' % err.stderr)
-            msg = _LE('Could not setup urls on the Block Driver')
-            LOG.error(msg)
 
     def do_setup(self, context):
         """Any initialization the volume driver does while starting."""
@@ -346,58 +379,46 @@ class SRBDriver(driver.VolumeDriver):
         return vg.get_volume(volume_name) is None
 
     def _create_file(self, volume):
-        try:
+        message = 'Could not create volume on any configured REST server'
+
+        with handle_process_execution_error(
+                message=message,
+                info_message=_LI('Error creating Volume'),
+                reraise=exception.VolumeBackendAPIException(data=message)):
             cmd = 'echo ' + volume['name'] + ' '
             cmd += str(self._size_int(volume['size'])
                        * self.OVER_ALLOC_RATIO) + 'G'
             cmd += ' > /sys/class/srb/create'
             putils.execute('/bin/sh', '-c', cmd,
                            root_helper='sudo', run_as_root=True)
-        except putils.ProcessExecutionError as err:
-            LOG.debug('Error creating Volume')
-            LOG.debug('Cmd       :%s' % err.cmd)
-            LOG.debug('Exit Code :%s' % err.exit_code)
-            LOG.debug('StdOut    :%s' % err.stdout)
-            LOG.debug('StdErr    :%s' % err.stderr)
-            message = 'Could not create volume on any configured REST server'
-            LOG.error(message)
-            raise exception.VolumeBackendAPIException(data=message)
 
         return self._set_device_path(volume)
 
     def _extend_file(self, volume, new_size):
-        try:
+        message = 'Could not extend volume on any configured REST server'
+
+        with handle_process_execution_error(
+                message=message,
+                info_message=_LI('Error extending Volume'),
+                reraise=exception.VolumeBackendAPIException(data=message)):
             cmd = 'echo ' + volume['name'] + ' '
             cmd += str(self._size_int(new_size)
                        * self.OVER_ALLOC_RATIO) + 'G'
             cmd += ' > /sys/class/srb/extend'
             putils.execute('/bin/sh', '-c', cmd,
                            root_helper='sudo', run_as_root=True)
-        except putils.ProcessExecutionError as err:
-            LOG.debug('Error extending Volume')
-            LOG.debug('Cmd       :%s' % err.cmd)
-            LOG.debug('Exit Code :%s' % err.exit_code)
-            LOG.debug('StdOut    :%s' % err.stdout)
-            LOG.debug('StdErr    :%s' % err.stderr)
-            message = 'Could not extend volume on any configured REST server'
-            LOG.error(message)
-            raise exception.VolumeBackendAPIException(data=message)
 
     @staticmethod
     def _destroy_file(volume):
-        try:
+        message = 'Could not destroy volume on any configured REST server'
+
+        with handle_process_execution_error(
+                message=message,
+                info_message=_LI('Error destroying Volume'),
+                reraise=exception.VolumeBackendAPIException(data=message)):
             cmd = 'echo ' + volume['name'] + ' > /sys/class/srb/destroy'
             putils.execute('/bin/sh', '-c', cmd,
                            root_helper='sudo', run_as_root=True)
-        except putils.ProcessExecutionError as err:
-            LOG.debug('Error destroying Volume')
-            LOG.debug('Cmd       :%s' % err.cmd)
-            LOG.debug('Exit Code :%s' % err.exit_code)
-            LOG.debug('StdOut    :%s' % err.stdout)
-            LOG.debug('StdErr    :%s' % err.stderr)
-            message = 'Could not destroy volume on any configured REST server'
-            LOG.error(message)
-            raise exception.VolumeBackendAPIException(data=message)
 
     # NOTE(joachim): Must only be called within a function decorated by:
     # @synchronized('devices', 'cinder-srb-')
@@ -445,21 +466,16 @@ class SRBDriver(driver.VolumeDriver):
 
         count = self._get_attached_count(volume)
         if count == 0:
-            try:
+            message = ('Could not attach volume %(vol)s as %(dev)s on system'
+                       % {'vol': name, 'dev': devname})
+            with handle_process_execution_error(
+                    message=message,
+                    info_message=_LI('Error attaching Volume'),
+                    reraise=exception.VolumeBackendAPIException(data=message)):
                 cmd = 'echo ' + name + ' ' + devname
                 cmd += ' > /sys/class/srb/attach'
                 putils.execute('/bin/sh', '-c', cmd,
                                root_helper='sudo', run_as_root=True)
-            except putils.ProcessExecutionError as err:
-                LOG.debug('Error attaching Volume')
-                LOG.debug('Cmd       :%s' % err.cmd)
-                LOG.debug('Exit Code :%s' % err.exit_code)
-                LOG.debug('StdOut    :%s' % err.stdout)
-                LOG.debug('StdErr    :%s' % err.stderr)
-                msg = ('Could not attach volume %(vol)s as %(dev)s on system' %
-                       {'vol': name, 'dev': devname})
-                LOG.error(msg)
-                raise exception.VolumeBackendAPIException(data=msg)
 
         self._increment_attached_count(volume)
 
@@ -497,7 +513,12 @@ class SRBDriver(driver.VolumeDriver):
         if count > 1:
             return
 
-        try:
+        message = ('Could not detach volume %(vol)s from device %(dev)s'
+                   % {'vol': name, 'dev': devname})
+        with handle_process_execution_error(
+                message=message,
+                info_message=_LI('Error detaching Volume'),
+                reraise=exception.VolumeBackendAPIException(data=message)):
             try:
                 if vg is not None:
                     self._do_deactivate(volume, vg)
@@ -517,19 +538,6 @@ class SRBDriver(driver.VolumeDriver):
                 raise
 
             self._decrement_attached_count(volume)
-
-        except putils.ProcessExecutionError as err:
-            LOG.debug('Error detaching Volume')
-            LOG.debug('Cmd       :%s' % err.cmd)
-            LOG.debug('Exit Code :%s' % err.exit_code)
-            LOG.debug('StdOut    :%s' % err.stdout)
-            LOG.debug('StdErr    :%s' % err.stderr)
-            raise exception.VolumeBackendAPIException(
-                _LE('Could not detach volume %(vol)s from device %(dev)s')
-                % {'vol': name, 'dev': devname}
-            )
-        except exception.VolumeBackendAPIException:
-            raise
 
     def _setup_lvm(self, volume):
         # NOTE(joachim): One-device volume group to manage thin snapshots

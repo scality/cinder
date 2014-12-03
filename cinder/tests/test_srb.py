@@ -92,6 +92,42 @@ class SRBRetryTestCase(test.TestCase):
         self.assertEqual(4, self.attempts)
 
 
+class TestHandleProcessExecutionError(test.TestCase):
+    def test_no_exception(self):
+        with srb.handle_process_execution_error(
+                message='', info_message='', reraise=True):
+            pass
+
+    def test_other_exception(self):
+        def f():
+            with srb.handle_process_execution_error(
+                    message='', info_message='', reraise=True):
+                1 / 0
+
+        self.assertRaises(ZeroDivisionError, f)
+
+    def test_reraise_true(self):
+        def f():
+            with srb.handle_process_execution_error(
+                    message='', info_message='', reraise=True):
+                raise processutils.ProcessExecutionError(description='Oops')
+
+        self.assertRaisesRegex(processutils.ProcessExecutionError, r'^Oops', f)
+
+    def test_reraise_false(self):
+        with srb.handle_process_execution_error(
+                message='', info_message='', reraise=False):
+            raise processutils.ProcessExecutionError(description='Oops')
+
+    def test_reraise_exception(self):
+        def f():
+            with srb.handle_process_execution_error(
+                    message='', info_message='', reraise=RuntimeError('Oops')):
+                raise processutils.ProcessExecutionError
+
+        self.assertRaisesRegex(RuntimeError, r'^Oops', f)
+
+
 class SRBDriverTestCase(test.TestCase):
     """Test case for the Scality Rest Block driver."""
 
