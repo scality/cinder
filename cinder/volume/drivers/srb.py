@@ -108,9 +108,9 @@ class retry:
 def patched(obj, attr, fun):
     '''Context manager to locally patch a method.
 
-    Within the managed context, the `attr` method of `obj` will be replaced by a
-    method which calls `fun` passing in the original `attr` attribute of `obj`
-    as well as any positional and keyword arguments.
+    Within the managed context, the `attr` method of `obj` will be replaced by
+    a method which calls `fun` passing in the original `attr` attribute of
+    `obj` as well as any positional and keyword arguments.
 
     At the end of the context, the original method is restored.
     '''
@@ -160,7 +160,7 @@ def handle_process_execution_error(message, info_message, reraise=True):
         LOG.debug('StdOut    : %s', exc.stdout)
         LOG.debug('StdErr    : %s', exc.stderr)
 
-        if reraise == True:
+        if reraise is True:
             raise exc
         elif reraise:
             raise reraise
@@ -530,7 +530,7 @@ class SRBDriver(driver.VolumeDriver):
 
             try:
                 self._do_detach(volume, vg=vg)
-            except putils.ProcessExecutionError as err:
+            except putils.ProcessExecutionError:
                 msg = _LE('Could not detach volume '
                           '%(vol)s from device %(dev)s')\
                     % {'vol': name, 'dev': devname}
