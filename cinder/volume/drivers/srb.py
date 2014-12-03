@@ -99,7 +99,7 @@ class retry:
                         raise ValueError('Unknown sleep mechanism: %r'
                                          % self._sleep_mechanism)
 
-            raise exc_info[0], exc_info[1], exc_info[2]
+            six.reraise(exc_info[0], exc_info[1], exc_info[2])
 
         return wrapped
 
