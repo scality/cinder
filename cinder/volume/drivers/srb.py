@@ -246,7 +246,7 @@ class SRBDriver(driver.VolumeDriver):
 
     def check_for_setup_error(self):
         """Returns an error if prerequisites aren't met."""
-        if self.base_urls is None or not len(self.base_urls):
+        if not self.base_urls:
             LOG.warning(_LW("Configuration variable srb_base_urls"
                             " not set or empty."))
 
@@ -411,7 +411,7 @@ class SRBDriver(driver.VolumeDriver):
         if volid not in self._attached_devices:
             self._attached_devices[volid] = 1
         else:
-            self._attached_devices[volid] = self._attached_devices[volid] + 1
+            self._attached_devices[volid] += 1
 
     # NOTE(joachim): Must only be called within a function decorated by:
     # @synchronized('devices', 'cinder-srb-')
@@ -425,7 +425,8 @@ class SRBDriver(driver.VolumeDriver):
                 % (self._get_volname(volume))
             )
 
-        self._attached_devices[volid] = self._attached_devices[volid] - 1
+        self._attached_devices[volid] -= 1
+
         if self._attached_devices[volid] == 0:
             del self._attached_devices[volid]
 
