@@ -228,7 +228,7 @@ class SRBDriver(driver.VolumeDriver):
             raise exception.VolumeBackendAPIException(data=message)
 
         with handle_process_execution_error(
-                message=_LE('Cound not setup urks on the Block Driver'),
+                message=_LE('Cound not setup urls on the Block Driver'),
                 info_message=_LI('Error creating Volume'),
                 reraise=False):
             cmd = 'echo ' + self.base_urls + ' > /sys/class/srb/add_urls'
