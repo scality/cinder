@@ -333,23 +333,26 @@ class SRBDriver(driver.VolumeDriver):
             'provider_location': volume['provider_location'],
         }
 
+    @staticmethod
+    def _activate_lv(orig, *args, **kwargs):
+        '''
+        Use with `patched` to patch `lvm.LVM.activate_lv` to ignore `EEXIST`
+        '''
+        try:
+            orig(*args, **kwargs)
+        except putils.ProcessExecutionError as exc:
+            if exc.exit_code != 5:
+                raise
+            else:
+                LOG.debug('`activate_lv` returned 5, ignored')
+
     def _get_lvm_vg(self, volume, create_vg=False):
         # NOTE(joachim): One-device volume group to manage thin snapshots
         # Get origin volume name even for snapshots
         volume_name = self._get_volname(volume)
         physical_volumes = [self._device_path(volume)]
 
-        # Patch `lvm.LVM.activate_lv` in order to let the `lvm.LVM` constructor
-        # succeed, even when the LV is already activated.
-
-        def activate_lv(orig, *args, **kwargs):
-            try:
-                orig(*args, **kwargs)
-            except putils.ProcessExecutionError as exc:
-                if exc.exit_code != 5:
-                    raise
-
-        with patched(lvm.LVM, 'activate_lv', activate_lv):
+        with patched(lvm.LVM, 'activate_lv', self._activate_lv):
             return lvm.LVM(volume_name, utils.get_root_helper(),
                            create_vg=create_vg,
                            physical_volumes=physical_volumes,
@@ -434,9 +437,8 @@ class SRBDriver(driver.VolumeDriver):
     # @synchronized('devices', 'cinder-srb-')
     def _get_attached_count(self, volume):
         volid = self._get_volid(volume)
-        if volid in self._attached_devices:
-            return self._attached_devices[volid]
-        return 0
+
+        return self._attached_devices.get(volid, 0)
 
     @synchronized('devices', 'cinder-srb-')
     def _is_attached(self, volume):
@@ -480,7 +482,9 @@ class SRBDriver(driver.VolumeDriver):
         except putils.ProcessExecutionError:
             with excutils.save_and_reraise_exception(reraise=True):
                 try:
-                    vg.activate_lv(volname)
+                    with patched(lvm.LVM, 'activate_lv', self._activate_lv):
+                        vg.activate_lv(volname)
+
                     self._do_deactivate(volume, vg)
                 except putils.ProcessExecutionError:
                     LOG.warning(_LW("Could not attempt any recovery to"
@@ -554,7 +558,8 @@ class SRBDriver(driver.VolumeDriver):
 
             # Some configurations of LVM do not automatically activate
             # ThinLVM snapshot LVs.
-            vg.activate_lv(srcvol['name'], True)
+            with patched(lvm.LVM, 'activate_lv', self._activate_lv):
+                vg.activate_lv(srcvol['name'], True)
 
             # copy_volume expects sizes in MiB, we store integer GiB
             # be sure to convert before passing in
