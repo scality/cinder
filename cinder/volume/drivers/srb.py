@@ -24,10 +24,7 @@ import functools
 import sys
 import time
 
-try:
-    from oslo_concurrency.lockutils import synchronized
-except ImportError:
-    from oslo.concurrency.lockutils import synchronized
+from oslo.concurrency import lockutils
 from oslo.concurrency import processutils as putils
 from oslo.config import cfg
 from oslo.utils import excutils
@@ -409,7 +406,7 @@ class SRBDriver(driver.VolumeDriver):
                            root_helper='sudo', run_as_root=True)
 
     # NOTE(joachim): Must only be called within a function decorated by:
-    # @synchronized('devices', 'cinder-srb-')
+    # @lockutils.synchronized('devices', 'cinder-srb-')
     def _increment_attached_count(self, volume):
         """Increments the attach count of the device"""
         volid = self._get_volid(volume)
@@ -419,7 +416,7 @@ class SRBDriver(driver.VolumeDriver):
             self._attached_devices[volid] += 1
 
     # NOTE(joachim): Must only be called within a function decorated by:
-    # @synchronized('devices', 'cinder-srb-')
+    # @lockutils.synchronized('devices', 'cinder-srb-')
     def _decrement_attached_count(self, volume):
         """Decrements the attach count of the device"""
         volid = self._get_volid(volume)
@@ -436,17 +433,17 @@ class SRBDriver(driver.VolumeDriver):
             del self._attached_devices[volid]
 
     # NOTE(joachim): Must only be called within a function decorated by:
-    # @synchronized('devices', 'cinder-srb-')
+    # @lockutils.synchronized('devices', 'cinder-srb-')
     def _get_attached_count(self, volume):
         volid = self._get_volid(volume)
 
         return self._attached_devices.get(volid, 0)
 
-    @synchronized('devices', 'cinder-srb-')
+    @lockutils.synchronized('devices', 'cinder-srb-')
     def _is_attached(self, volume):
         return self._get_attached_count(volume) > 0
 
-    @synchronized('devices', 'cinder-srb-')
+    @lockutils.synchronized('devices', 'cinder-srb-')
     def _attach_file(self, volume):
         name = self._get_volname(volume)
         devname = self._device_name(volume)
@@ -492,7 +489,7 @@ class SRBDriver(driver.VolumeDriver):
                     LOG.warning(_LW("Could not attempt any recovery to"
                                     " retry the failed detach"))
 
-    @synchronized('devices', 'cinder-srb-')
+    @lockutils.synchronized('devices', 'cinder-srb-')
     def _detach_file(self, volume):
         name = self._get_volname(volume)
         devname = self._device_name(volume)
