@@ -169,71 +169,119 @@ class SRBDriverTestCase(test.TestCase):
             },
         }
 
-    def _fake_execute(self, *cmd, **kwargs):
-        def convert_size(s):
-            if isinstance(s, (int, long)):
-                return s
+    @staticmethod
+    def _convert_size(s):
+        if isinstance(s, (int, long)):
+            return s
 
-            try:
-                return int(s)
-            except ValueError:
-                pass
+        try:
+            return int(s)
+        except ValueError:
+            pass
 
-            conv_map = {
-                'g': units.Gi,
-                'G': units.Gi,
-                'm': units.Mi,
-                'M': units.Mi,
-                'k': units.Ki,
-                'K': units.Ki,
-            }
+        conv_map = {
+            'g': units.Gi,
+            'G': units.Gi,
+            'm': units.Mi,
+            'M': units.Mi,
+            'k': units.Ki,
+            'K': units.Ki,
+        }
 
-            if s[-1] in conv_map:
-                return int(s[:-1]) * conv_map[s[-1]]
+        if s[-1] in conv_map:
+            return int(s[:-1]) * conv_map[s[-1]]
 
-            raise ValueError('Unknown size: %r' % s)
+        raise ValueError('Unknown size: %r' % s)
 
-        cmd_string = ', '.join(cmd)
-        data = "\n"
+    def _fake_add_urls(self):
+        def check(cmd_string):
+            return '> /sys/class/srb/add_urls' in cmd_string
 
-        ##
-        #  To test behavior, we need to stub part of the brick/local_dev/lvm
-        #  functions too, because we want to check the state between calls,
-        #  not only if the calls were done
-        ##
-        if '> /sys/class/srb/add_urls' in cmd_string:
+        def act(cmd):
             self._urls.append(cmd[2].split()[1])
-        elif '> /sys/class/srb/create' in cmd_string:
+
+        return check, act
+
+    def _fake_create(self):
+        def check(cmd_string):
+            return '> /sys/class/srb/create' in cmd_string
+
+        def act(cmd):
             volname = cmd[2].split()[1]
             volsize = cmd[2].split()[2]
             self._volumes[volname] = {
                 "name": volname,
-                "size": convert_size(volsize),
+                "size": self._convert_size(volsize),
                 "vgs": {
                 },
             }
-        elif '> /sys/class/srb/destroy' in cmd_string:
+
+        return check, act
+
+    def _fake_destroy(self):
+        def check(cmd_string):
+            return '> /sys/class/srb/destroy' in cmd_string
+
+        def act(cmd):
             volname = cmd[2].split()[1]
             del self._volumes[volname]
-        elif '> /sys/class/srb/extend' in cmd_string:
+
+        return check, act
+
+    def _fake_extend(self):
+        def check(cmd_string):
+            return '> /sys/class/srb/extend' in cmd_string
+
+        def act(cmd):
             volname = cmd[2].split()[1]
             volsize = cmd[2].split()[2]
-            self._volumes[volname]["size"] = convert_size(volsize)
-        elif '> /sys/class/srb/attach' in cmd_string:
+            self._volumes[volname]["size"] = self._convert_size(volsize)
+
+        return check, act
+
+    def _fake_attach(self):
+        def check(cmd_string):
+            return '> /sys/class/srb/attach' in cmd_string
+
+        def act(_):
             pass
-        elif '> /sys/class/srb/detach' in cmd_string:
+
+        return check, act
+
+    def _fake_detach(self):
+        def check(cmd_string):
+            return '> /sys/class/srb/detach' in cmd_string
+
+        def act(_):
             pass
-        elif 'env, LC_ALL=C, vgs, --noheadings, -o, name' in cmd_string:
+
+        return check, act
+
+    def _fake_vg_list(self):
+        def check(cmd_string):
+            return 'env, LC_ALL=C, vgs, --noheadings, -o, name' in cmd_string
+
+        def act(cmd):
             # vg exists
             data = "  fake-outer-vg\n"
             for vname in self._volumes:
                 vol = self._volumes[vname]
                 for vgname in vol['vgs']:
                     data += "  " + vgname + "\n"
-        elif 'env, LC_ALL=C, lvs, --noheadings, --unit=g, '\
-            '-o, size,data_percent, --separator, :, --nosuffix'\
-                in cmd_string:
-            # get thinpool free space
+
+            return data
+
+        return check, act
+
+    def _fake_thinpool_free_space(self):
+        def check(cmd_string):
+            return 'env, LC_ALL=C, lvs, --noheadings, --unit=g, '\
+                '-o, size,data_percent, --separator, :, --nosuffix'\
+                in cmd_string
+
+        def act(cmd):
+            data = ''
+
             groupname = cmd[10].split('/')[2]
             poolname = cmd[10].split('/')[3]
             for vname in self._volumes:
@@ -247,10 +295,26 @@ class SRBDriverTestCase(test.TestCase):
                             continue
                         lv_size = vg['lvs'][lvname]
                         data += "  %.2f:0.00\n" % (lv_size / units.Gi)
-        elif 'env, LC_ALL=C, vgs, --version' in cmd_string:
-            data = "  LVM version:     2.02.95(2) (2012-03-06)\n"
-        elif ('env, LC_ALL=C, lvs, --noheadings, --unit=g, '
-              '-o, vg_name,name,size, --nosuffix' in cmd_string):
+
+            return data
+
+        return check, act
+
+    def _fake_vgs_version(self):
+        def check(cmd_string):
+            return 'env, LC_ALL=C, vgs, --version' in cmd_string
+
+        def act(cmd):
+            return "  LVM version:     2.02.95(2) (2012-03-06)\n"
+
+        return check, act
+
+    def _fake_get_all_volumes(self):
+        def check(cmd_string):
+            return 'env, LC_ALL=C, lvs, --noheadings, --unit=g, ' \
+                '-o, vg_name,name,size, --nosuffix' in cmd_string
+
+        def act(cmd):
             # get_all_volumes
             data = "  fake-outer-vg fake-1 1.00g\n"
             for vname in self._volumes:
@@ -261,10 +325,18 @@ class SRBDriverTestCase(test.TestCase):
                         lv_size = vg['lvs'][lvname]
                         data += "  %s %s %.2fg\n" %\
                             (vgname, lvname, lv_size)
-        elif ('env, LC_ALL=C, pvs, --noheadings, --unit=g, '
-              '-o, vg_name,name,size,free, --separator, :, --nosuffix'
-              in cmd_string):
-            # get_all_phys_volumes
+
+            return data
+
+        return check, act
+
+    def _fake_get_all_physical_volumes(self):
+        def check(cmd_string):
+            return 'env, LC_ALL=C, pvs, --noheadings, --unit=g, ' \
+                '-o, vg_name,name,size,free, --separator, :, --nosuffix' \
+                in cmd_string
+
+        def act(cmd):
             data = "  fake-outer-vg:/dev/fake1:10.00:1.00\n"
             for vname in self._volumes:
                 vol = self._volumes[vname]
@@ -275,9 +347,20 @@ class SRBDriverTestCase(test.TestCase):
                         data += "  %s:/dev/srb/%s/device:%.2f:%.2f\n" %\
                             (vgname, vol['name'],
                              lv_size / units.Gi, lv_size / units.Gi)
-        elif ('env, LC_ALL=C, vgs, --noheadings, --unit=g, '
-              '-o, name,size,free,lv_count,uuid, --separator, :, --nosuffix'
-              in cmd_string):
+
+            return data
+
+        return check, act
+
+    def _fake_get_all_volume_groups(self):
+        def check(cmd_string):
+            return 'env, LC_ALL=C, vgs, --noheadings, --unit=g, ' \
+                '-o, name,size,free,lv_count,uuid, --separator, :, ' \
+                '--nosuffix' in cmd_string
+
+        def act(cmd):
+            data = ''
+
             search_vgname = None
             if len(cmd) == 11:
                 search_vgname = cmd[10]
@@ -294,24 +377,67 @@ class SRBDriverTestCase(test.TestCase):
                             (vgname,
                              vol['size'] / units.Gi, vol['size'] / units.Gi,
                              len(vg['lvs']) + len(vg['snaps']), vgname)
-        elif 'udevadm, settle, ' in cmd_string:
+
+            return data
+
+        return check, act
+
+    def _fake_udevadm_settle(self):
+        def check(cmd_string):
+            return 'udevadm, settle, ' in cmd_string
+
+        def act(_):
             pass
-        elif 'vgcreate, ' in cmd_string:
+
+        return check, act
+
+    def _fake_vgcreate(self):
+        def check(cmd_string):
+            return 'vgcreate, ' in cmd_string
+
+        def act(cmd):
             volname = "volume-%s" % (cmd[2].split('/')[2].split('-')[1])
             vgname = cmd[1]
             self._volumes[volname]['vgs'][vgname] = {
                 "lvs": {},
                 "snaps": []
             }
-        elif 'vgremove, -f, ' in cmd_string:
+
+        return check, act
+
+    def _fake_vgremove(self):
+        def check(cmd_string):
+            return 'vgremove, -f, ' in cmd_string
+
+        def act(cmd):
             volname = cmd[2]
             del self._volumes[volname]['vgs'][volname]
-        elif 'vgchange, -ay, ' in cmd_string:
+
+        return check, act
+
+    def _fake_vgchange_ay(self):
+        def check(cmd_string):
+            return 'vgchange, -ay, ' in cmd_string
+
+        def act(_):
             pass
-        elif 'vgchange, -an, ' in cmd_string:
+
+        return check, act
+
+    def _fake_vgchange_an(self):
+        def check(cmd_string):
+            return 'vgchange, -an, ' in cmd_string
+
+        def act(_):
             pass
-        elif 'lvcreate, -T, -L, ' in cmd_string:
-            # thin pool creation
+
+        return check, act
+
+    def _fake_lvcreate_T_L(self):
+        def check(cmd_string):
+            return 'lvcreate, -T, -L, ' in cmd_string
+
+        def act(cmd):
             vgname = cmd[4].split('/')[0]
             lvname = cmd[4].split('/')[1]
             if cmd[3][-1] == 'g':
@@ -321,8 +447,16 @@ class SRBDriverTestCase(test.TestCase):
             else:
                 lv_size = int(cmd[3])
             self._volumes[vgname]['vgs'][vgname]['lvs'][lvname] = lv_size
-        elif 'lvcreate, -T, -V, ' in cmd_string:
-            # think-lv creation
+
+        return check, act
+
+    def _fake_lvcreate_T_V(self):
+        def check(cmd_string):
+            return 'lvcreate, -T, -V, ' in cmd_string
+
+        def act(cmd):
+            cmd_string = ', '.join(cmd)
+
             vgname = cmd[6].split('/')[0]
             poolname = cmd[6].split('/')[1]
             lvname = cmd[5]
@@ -337,7 +471,16 @@ class SRBDriverTestCase(test.TestCase):
             else:
                 lv_size = int(cmd[3])
             self._volumes[vgname]['vgs'][vgname]['lvs'][lvname] = lv_size
-        elif 'lvcreate, --name, ' in cmd_string:
+
+        return check, act
+
+    def _fake_lvcreate_name(self):
+        def check(cmd_string):
+            return 'lvcreate, --name, ' in cmd_string
+
+        def act(cmd):
+            cmd_string = ', '.join(cmd)
+
             vgname = cmd[4].split('/')[0]
             lvname = cmd[4].split('/')[1]
             snapname = cmd[2]
@@ -348,10 +491,27 @@ class SRBDriverTestCase(test.TestCase):
                 raise AssertionError('snap creation attempted on existing '
                                      'snapshot: %s' % cmd_string)
             self._volumes[vgname]['vgs'][vgname]['snaps'].append(snapname[1:])
-        elif 'lvchange, -a, y, --yes' in cmd_string:
+
+        return check, act
+
+    def _fake_lvchange(self):
+        def check(cmd_string):
+            return 'lvchange, -a, y, --yes' in cmd_string
+
+        def act(_):
             pass
-        elif ('lvremove, --config, activation { retry_deactivation = 1}, -f, '
-              in cmd_string):
+
+        return check, act
+
+    def _fake_lvremove(self):
+
+        def check(cmd_string):
+            return 'lvremove, --config, activation ' \
+                '{ retry_deactivation = 1}, -f, ' in cmd_string
+
+        def act(cmd):
+            cmd_string = ', '.join(cmd)
+
             vgname = cmd[4].split('/')[0]
             lvname = cmd[4].split('/')[1]
             if lvname in self._volumes[vgname]['vgs'][vgname]['lvs']:
@@ -361,9 +521,18 @@ class SRBDriverTestCase(test.TestCase):
             else:
                 raise AssertionError('Cannot delete inexistant lv or snap'
                                      'thin-lv: %s' % cmd_string)
-        elif ('env, LC_ALL=C, lvdisplay, --noheading, -C, -o, '
-              'Attr, ' in cmd_string):
-            # lv has snapshot
+
+        return check, act
+
+    def _fake_lvdisplay(self):
+        def check(cmd_string):
+            return 'env, LC_ALL=C, lvdisplay, --noheading, -C, -o, Attr, ' \
+                in cmd_string
+
+        def act(cmd):
+            data = ''
+            cmd_string = ', '.join(cmd)
+
             vgname = cmd[7].split('/')[0]
             lvname = cmd[7].split('/')[1]
             if lvname not in self._volumes[vgname]['vgs'][vgname]['lvs']:
@@ -373,7 +542,17 @@ class SRBDriverTestCase(test.TestCase):
                 data = '  owi-a-\n'
             else:
                 data = '  wi-a-\n'
-        elif 'lvextend, -L, ' in cmd_string:
+
+            return data
+
+        return check, act
+
+    def _fake_lvextend(self):
+        def check(cmd_string):
+            return 'lvextend, -L, ' in cmd_string
+
+        def act(cmd):
+            cmd_string = ', '.join(cmd)
             vgname = cmd[3].split('/')[0]
             lvname = cmd[3].split('/')[1]
             if cmd[2][-1] == 'g':
@@ -389,12 +568,60 @@ class SRBDriverTestCase(test.TestCase):
                 raise AssertionError('Cannot extend inexistant lv'
                                      ': %s' % cmd_string)
             self._volumes[vgname]['vgs'][vgname]['lvs'][lvname] = size
-        elif 'pvresize, ' in cmd_string:
-            pass
-        else:
-            raise AssertionError('unexpected command called: %s' % cmd_string)
 
-        return (data, "")
+        return check, act
+
+    def _fake_pvresize(self):
+        def check(cmd_string):
+            return 'pvresize, ' in cmd_string
+
+        def act(_):
+            pass
+
+        return check, act
+
+    def _fake_execute(self, *cmd, **kwargs):
+        cmd_string = ', '.join(cmd)
+        ##
+        #  To test behavior, we need to stub part of the brick/local_dev/lvm
+        #  functions too, because we want to check the state between calls,
+        #  not only if the calls were done
+        ##
+
+        handlers = [
+            self._fake_add_urls(),
+            self._fake_attach(),
+            self._fake_create(),
+            self._fake_destroy(),
+            self._fake_detach(),
+            self._fake_extend(),
+            self._fake_get_all_physical_volumes(),
+            self._fake_get_all_volume_groups(),
+            self._fake_get_all_volumes(),
+            self._fake_lvchange(),
+            self._fake_lvcreate_T_L(),
+            self._fake_lvcreate_T_V(),
+            self._fake_lvcreate_name(),
+            self._fake_lvdisplay(),
+            self._fake_lvextend(),
+            self._fake_lvremove(),
+            self._fake_pvresize(),
+            self._fake_thinpool_free_space(),
+            self._fake_udevadm_settle(),
+            self._fake_vg_list(),
+            self._fake_vgchange_an(),
+            self._fake_vgchange_ay(),
+            self._fake_vgcreate(),
+            self._fake_vgremove(),
+            self._fake_vgs_version(),
+        ]
+
+        for (check, act) in handlers:
+            if check(cmd_string):
+                out = act(cmd)
+                return (out, '')
+
+        self.fail('Unexpected command: %s' % cmd_string)
 
     def _configure_driver(self):
         srb.CONF.srb_base_urls = "http://localhost/volumes"
