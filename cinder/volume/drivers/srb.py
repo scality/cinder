@@ -213,6 +213,7 @@ class SRBDriver(driver.VolumeDriver):
     VERSION = '0.1.0'
 
     OVER_ALLOC_RATIO = 2
+    SNAPSHOT_PREFIX = 'snapshot'
 
     def __init__(self, *args, **kwargs):
         super(SRBDriver, self).__init__(*args, **kwargs)
@@ -223,7 +224,7 @@ class SRBDriver(driver.VolumeDriver):
         self._attached_devices = {}
 
     def _setup_urls(self):
-        if self.base_urls is None or not len(self.base_urls):
+        if not self.base_urls:
             message = "No url configured"
             raise exception.VolumeBackendAPIException(data=message)
 
@@ -240,6 +241,7 @@ class SRBDriver(driver.VolumeDriver):
         """Any initialization the volume driver does while starting."""
         self.backend_name = self.configuration.safe_get('volume_backend_name')
         self.base_urls = self.configuration.safe_get('srb_base_urls')
+
         self._setup_urls()
 
     def check_for_setup_error(self):
@@ -247,64 +249,65 @@ class SRBDriver(driver.VolumeDriver):
         if self.base_urls is None or not len(self.base_urls):
             LOG.warning(_LW("Configuration variable srb_base_urls"
                             " not set or empty."))
+
         if self.urls_setup is False:
             message = "Could not setup urls properly"
             raise exception.VolumeBackendAPIException(data=message)
 
-    @staticmethod
-    def _is_snapshot(volume):
-        return volume['name'].startswith('snapshot')
+    @classmethod
+    def _is_snapshot(cls, volume):
+        return volume['name'].startswith(cls.SNAPSHOT_PREFIX)
 
-    @staticmethod
-    def _get_volname(volume):
+    @classmethod
+    def _get_volname(cls, volume):
         """Returns the name of the actual volume
 
         If the volume is a snapshot, it returns the name of the parent volume.
         otherwise, returns the volume's name.
         """
         name = volume['name']
-        if SRBDriver._is_snapshot(volume):
+        if cls._is_snapshot(volume):
             name = "volume-%s" % (volume['volume_id'])
         return name
 
-    @staticmethod
-    def _get_volid(volume):
+    @classmethod
+    def _get_volid(cls, volume):
         """Returns the ID of the actual volume
 
         If the volume is a snapshot, it returns the ID of the parent volume.
         otherwise, returns the volume's id.
         """
         volid = volume['id']
-        if SRBDriver._is_snapshot(volume):
+        if cls._is_snapshot(volume):
             volid = volume['volume_id']
         return volid
 
-    @staticmethod
-    def _device_name(volume):
-        volume_id = SRBDriver._get_volid(volume)
+    @classmethod
+    def _device_name(cls, volume):
+        volume_id = cls._get_volid(volume)
         name = 'cinder-%s' % volume_id
 
         # Device names can't be longer than 32 bytes
         return name[:32]
 
-    @staticmethod
-    def _device_path(volume):
-        return "/dev/" + SRBDriver._device_name(volume)
+    @classmethod
+    def _device_path(cls, volume):
+        return "/dev/" + cls._device_name(volume)
 
-    @staticmethod
-    def _escape_snapshot(snapshot_name):
+    @classmethod
+    def _escape_snapshot(cls, snapshot_name):
         # Linux LVM reserves name that starts with snapshot, so that
         # such volume name can't be created. Mangle it.
-        if not snapshot_name.startswith('snapshot'):
+        if not snapshot_name.startswith(cls.SNAPSHOT_PREFIX):
             return snapshot_name
         return '_' + snapshot_name
 
-    @staticmethod
-    def _mapper_path(volume):
-        groupname = SRBDriver._get_volname(volume)
+    @classmethod
+    def _mapper_path(cls, volume):
+        groupname = cls._get_volname(volume)
         name = volume['name']
-        if SRBDriver._is_snapshot(volume):
-            name = SRBDriver._escape_snapshot(name)
+        if cls._is_snapshot(volume):
+            name = cls._escape_snapshot(name)
         # NOTE(vish): stops deprecation warning
         groupname = groupname.replace('-', '--')
         name = name.replace('-', '--')
@@ -323,9 +326,9 @@ class SRBDriver(driver.VolumeDriver):
             raise exception.VolumeBackendAPIException(data=message)
         return int(size_in_g)
 
-    @staticmethod
-    def _set_device_path(volume):
-        volume['provider_location'] = SRBDriver._get_volname(volume)
+    @classmethod
+    def _set_device_path(cls, volume):
+        volume['provider_location'] = cls._get_volname(volume)
         return {
             'provider_location': volume['provider_location'],
         }
@@ -573,9 +576,9 @@ class SRBDriver(driver.VolumeDriver):
         return updates
 
     def create_volume_from_snapshot(self, volume, snapshot):
-        updates = self._create_n_copy_volume(volume, snapshot)
+        """Creates a volume from a snapshot."""
 
-        return updates
+        return self._create_n_copy_volume(volume, snapshot)
 
     def create_cloned_volume(self, volume, src_vref):
         """Creates a clone of the specified volume."""
