@@ -166,6 +166,42 @@ def handle_process_execution_error(message, info_message, reraise=True):
             raise reraise
 
 
+@contextlib.contextmanager
+def temp_snapshot(driver, volume, src_vref):
+    snapshot = {'volume_name': src_vref['name'],
+                'volume_id': src_vref['id'],
+                'volume_size': src_vref['size'],
+                'name': 'snapshot-clone-%s' % volume['id'],
+                'id': 'tmp-snap-%s' % volume['id'],
+                'size': src_vref['size']}
+
+    driver.create_snapshot(snapshot)
+
+    try:
+        yield snapshot
+    finally:
+        driver.delete_snapshot(snapshot)
+
+
+@contextlib.contextmanager
+def temp_raw_device(driver, volume):
+    driver._attach_file(volume)
+
+    try:
+        yield
+    finally:
+        driver._detach_file(volume)
+
+
+@contextlib.contextmanager
+def temp_lvm_device(driver, volume):
+    with temp_raw_device(driver, volume):
+        vg = driver._get_lvm_vg(volume)
+        vg.activate_vg()
+
+        yield vg
+
+
 class SRBDriver(driver.VolumeDriver):
     """Scality SRB volume driver
 
@@ -177,62 +213,6 @@ class SRBDriver(driver.VolumeDriver):
     VERSION = '0.1.0'
 
     OVER_ALLOC_RATIO = 2
-
-    class TempSnapshot(object):
-        def __init__(self, drv, volume, src_vref):
-            self._driver = drv
-            self._dst = volume
-            self._src = src_vref
-            self._snap = {'volume_name': self._src['name'],
-                          'volume_id': self._src['id'],
-                          'volume_size': self._src['size'],
-                          'name': 'snapshot-clone-%s' % self._dst['id'],
-                          'id': 'tmp-snap-%s' % self._dst['id'],
-                          'size': self._src['size']}
-
-        def __enter__(self):
-            self._driver.create_snapshot(self._snap)
-            return self
-
-        def get_snap(self):
-            return self._snap
-
-        def __exit__(self, type, value, traceback):
-            self._driver.delete_snapshot(self._snap)
-
-    class TempRawDevice(object):
-        def __init__(self, drv, volume):
-            LOG.debug('Creating temporary device: %s'
-                      % drv._device_name(volume))
-            self._driver = drv
-            self._vol = volume
-
-        def __enter__(self):
-            self._driver._attach_file(self._vol)
-            return self
-
-        def __exit__(self, exc_type, exc_value, exc_tb):
-            self._driver._detach_file(self._vol)
-            if exc_type is not None:
-                six.reraise(exc_type, exc_value, exc_tb)
-
-    class TempLVMDevice(TempRawDevice):
-        def __init__(self, *args, **kwargs):
-            super(SRBDriver.TempLVMDevice, self).__init__(*args, **kwargs)
-            self._vg = None
-
-        def get_vg(self):
-            return self._vg
-
-        def __enter__(self):
-            super(SRBDriver.TempLVMDevice, self).__enter__()
-            self._vg = self._driver._get_lvm_vg(self._vol)
-            self._vg.activate_vg()
-            return self
-
-        def __exit__(self, exc_type, exc_value, exc_tb):
-            super(SRBDriver.TempLVMDevice, self).__exit__(exc_type,
-                                                          exc_value, exc_tb)
 
     def __init__(self, *args, **kwargs):
         super(SRBDriver, self).__init__(*args, **kwargs)
@@ -564,13 +544,12 @@ class SRBDriver(driver.VolumeDriver):
         updates = self._create_file(dstvol)
 
         # We need devices attached for IO operations.
-        with self.TempLVMDevice(self, srcvol) as srcdev, \
-                self.TempRawDevice(self, dstvol):
+        with temp_lvm_device(self, srcvol) as vg, \
+                temp_raw_device(self, dstvol):
             self._setup_lvm(dstvol)
 
             # Some configurations of LVM do not automatically activate
             # ThinLVM snapshot LVs.
-            vg = srcdev.get_vg()
             vg.activate_lv(srcvol['name'], True)
 
             # copy_volume expects sizes in MiB, we store integer GiB
@@ -589,7 +568,7 @@ class SRBDriver(driver.VolumeDriver):
         """
         updates = self._create_file(volume)
         # We need devices attached for LVM operations.
-        with self.TempRawDevice(self, volume):
+        with temp_raw_device(self, volume):
             self._setup_lvm(volume)
         return updates
 
@@ -603,9 +582,9 @@ class SRBDriver(driver.VolumeDriver):
         LOG.info(_LI('Creating clone of volume: %s') % src_vref['id'])
 
         updates = None
-        with self.TempLVMDevice(self, src_vref):
-            with self.TempSnapshot(self, volume, src_vref) as temp:
-                updates = self._create_n_copy_volume(volume, temp.get_snap())
+        with temp_lvm_device(self, src_vref):
+            with temp_snapshot(self, volume, src_vref) as snapshot:
+                updates = self._create_n_copy_volume(volume, snapshot)
 
         return updates
 
@@ -614,7 +593,7 @@ class SRBDriver(driver.VolumeDriver):
         attached = False
         if self._is_attached(volume):
             attached = True
-            with self.TempLVMDevice(self, volume):
+            with temp_lvm_device(self, volume):
                 self._destroy_lvm(volume)
             self._detach_file(volume)
 
@@ -625,8 +604,7 @@ class SRBDriver(driver.VolumeDriver):
 
     def create_snapshot(self, snapshot):
         """Creates a snapshot."""
-        with self.TempLVMDevice(self, snapshot) as dev:
-            vg = dev.get_vg()
+        with temp_lvm_device(self, snapshot) as vg:
             # NOTE(joachim) we only want to support thin lvm_types
             vg.create_lv_snapshot(self._escape_snapshot(snapshot['name']),
                                   snapshot['volume_name'],
@@ -634,8 +612,7 @@ class SRBDriver(driver.VolumeDriver):
 
     def delete_snapshot(self, snapshot):
         """Deletes a snapshot."""
-        with self.TempLVMDevice(self, snapshot) as dev:
-            vg = dev.get_vg()
+        with temp_lvm_device(self, snapshot) as vg:
             if self._volume_not_present(
                     vg, self._escape_snapshot(snapshot['name'])):
                 # If the snapshot isn't present, then don't attempt to delete
@@ -664,7 +641,7 @@ class SRBDriver(driver.VolumeDriver):
 
     def copy_image_to_volume(self, context, volume, image_service, image_id):
         """Fetch the image from image_service and write it to the volume."""
-        with self.TempLVMDevice(self, volume):
+        with temp_lvm_device(self, volume):
             image_utils.fetch_to_volume_format(context,
                                                image_service,
                                                image_id,
@@ -676,7 +653,7 @@ class SRBDriver(driver.VolumeDriver):
 
     def copy_volume_to_image(self, context, volume, image_service, image_meta):
         """Copy the volume to the specified image."""
-        with self.TempLVMDevice(self, volume):
+        with temp_lvm_device(self, volume):
             image_utils.upload_volume(context,
                                       image_service,
                                       image_meta,
@@ -686,8 +663,7 @@ class SRBDriver(driver.VolumeDriver):
         new_size_str = str(self._size_int(new_size)
                            * self.OVER_ALLOC_RATIO) + 'g'
         self._extend_file(volume, new_size)
-        with self.TempLVMDevice(self, volume) as dev:
-            vg = dev.get_vg()
+        with temp_lvm_device(self, volume) as vg:
             vg.pv_resize(self._device_path(volume), new_size_str)
             vg.extend_thin_pool()
             vg.extend_volume(volume['name'], new_size_str)
