@@ -702,10 +702,6 @@ class SRBISCSIDriver(SRBDriver, driver.ISCSIDriver):
             self.target_helper.set_execute(execute)
 
     def ensure_export(self, context, volume):
-        self._attach_file(volume)
-        vg = self._get_lvm_vg(volume)
-        vg.activate_vg()
-
         volume_name = volume['name']
         iscsi_name = "%s%s" % (self.configuration.iscsi_target_prefix,
                                volume_name)
@@ -723,8 +719,12 @@ class SRBISCSIDriver(SRBDriver, driver.ISCSIDriver):
 
     def create_export(self, context, volume):
         """Creates an export for a logical volume."""
+        self._attach_file(volume)
+        vg = self._get_lvm_vg(volume)
+        vg.activate_vg()
+
         # SRB uses the same name as the volume for the VG
-        volume_path = "/dev/%s/%s" % (volume['name'], volume['name'])
+        volume_path = self._mapper_path(volume)
 
         data = self.target_helper.create_export(context,
                                                 volume,
