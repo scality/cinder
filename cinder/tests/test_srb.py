@@ -50,7 +50,7 @@ class SRBRetryTestCase(test.TestCase):
 
         ret = _try_failing(self)
 
-        self.assertEqual(True, ret)
+        self.assertTrue(ret)
         self.assertEqual(expected_attempts, self.attempts)
 
     def test_retry_fail_by_exception(self):
@@ -69,7 +69,7 @@ class SRBRetryTestCase(test.TestCase):
         except processutils.ProcessExecutionError:
             pass
 
-        self.assertEqual(None, ret)
+        self.assertIsNone(ret)
         self.assertEqual(expected_attempts, self.attempts)
 
     def test_retry_fail_and_succeed_mixed(self):
@@ -282,8 +282,7 @@ class SRBDriverTestCase(test.TestCase):
         def act(cmd):
             data = ''
 
-            groupname = cmd[10].split('/')[2]
-            poolname = cmd[10].split('/')[3]
+            groupname, poolname = cmd[10].split('/')[2:4]
             for vname in self._volumes:
                 vol = self._volumes[vname]
                 for vgname in vol['vgs']:

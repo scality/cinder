@@ -71,6 +71,8 @@ class retry:
         self._sleep_factor = sleep_factor
 
     def __call__(self, fun):
+        func_name = fun.func_name
+
         @functools.wraps(fun)
         def wrapped(*args, **kwargs):
             sleep_time = self._sleep_factor
@@ -78,8 +80,9 @@ class retry:
 
             for attempt in xrange(self._count):
                 if attempt != 0:
-                    LOG.warning(_LW("Retrying failed call, attempt %i"),
-                                attempt)
+                    LOG.warning(
+                        _LW("Retrying failed call to %s, attempt %i"),
+                        func_name, attempt)
 
                 try:
                     return fun(*args, **kwargs)
@@ -212,6 +215,8 @@ class SRBDriver(driver.VolumeDriver):
 
     VERSION = '0.1.0'
 
+    # Over-allocation ratio (multiplied with requested size) for thin
+    # provisioning
     OVER_ALLOC_RATIO = 2
     SNAPSHOT_PREFIX = 'snapshot'
 
@@ -240,7 +245,12 @@ class SRBDriver(driver.VolumeDriver):
     def do_setup(self, context):
         """Any initialization the volume driver does while starting."""
         self.backend_name = self.configuration.safe_get('volume_backend_name')
-        self.base_urls = self.configuration.safe_get('srb_base_urls')
+
+        base_urls = self.configuration.safe_get('srb_base_urls')
+        if base_urls:
+            base_urls = ','.join(s.strip() for s in base_urls.split(','))
+
+        self.base_urls = base_urls
 
         self._setup_urls()
 
@@ -366,7 +376,7 @@ class SRBDriver(driver.VolumeDriver):
 
         with handle_process_execution_error(
                 message=message,
-                info_message=_LI('Error creating Volume'),
+                info_message=_LI('Error creating Volume %s') % volume['name'],
                 reraise=exception.VolumeBackendAPIException(data=message)):
             size = self._size_int(volume['size']) * self.OVER_ALLOC_RATIO
 
@@ -383,7 +393,7 @@ class SRBDriver(driver.VolumeDriver):
 
         with handle_process_execution_error(
                 message=message,
-                info_message=_LI('Error extending Volume'),
+                info_message=_LI('Error extending Volume %s') % volume['name'],
                 reraise=exception.VolumeBackendAPIException(data=message)):
             size = self._size_int(new_size) * self.OVER_ALLOC_RATIO
 
@@ -422,9 +432,9 @@ class SRBDriver(driver.VolumeDriver):
         volid = self._get_volid(volume)
         if volid not in self._attached_devices:
             raise exception.VolumeBackendAPIException(
-                _LE("Internal error in srb driver: "
-                    "Trying to detach detached volume %s")
-                % (self._get_volname(volume))
+                ("Internal error in srb driver: "
+                 "Trying to detach detached volume %s")
+                 % (self._get_volname(volume))
             )
 
         self._attached_devices[volid] -= 1
@@ -498,6 +508,8 @@ class SRBDriver(driver.VolumeDriver):
 
         count = self._get_attached_count(volume)
         if count > 1:
+            LOG.info(_LI('Reference count of %s is %d, not detaching'),
+                     volume['name'], count)
             return
 
         message = ('Could not detach volume %(vol)s from device %(dev)s'
@@ -547,7 +559,7 @@ class SRBDriver(driver.VolumeDriver):
             LOG.warning(_LW('Removed volume group %s still appears in vgs'),
                         vg.vg_name)
 
-    def _create_n_copy_volume(self, dstvol, srcvol):
+    def _create_and_copy_volume(self, dstvol, srcvol):
         """Creates a volume from a volume or a snapshot."""
         updates = self._create_file(dstvol)
 
@@ -572,8 +584,10 @@ class SRBDriver(driver.VolumeDriver):
         return updates
 
     def create_volume(self, volume):
-        """Creates a volume. Can optionally return a Dictionary of
-        changes to the volume object to be persisted.
+        """Creates a volume.
+
+        Can optionally return a Dictionary of changes to the volume object to
+        be persisted.
         """
         updates = self._create_file(volume)
         # We need devices attached for LVM operations.
@@ -584,7 +598,7 @@ class SRBDriver(driver.VolumeDriver):
     def create_volume_from_snapshot(self, volume, snapshot):
         """Creates a volume from a snapshot."""
 
-        return self._create_n_copy_volume(volume, snapshot)
+        return self._create_and_copy_volume(volume, snapshot)
 
     def create_cloned_volume(self, volume, src_vref):
         """Creates a clone of the specified volume."""
@@ -593,7 +607,7 @@ class SRBDriver(driver.VolumeDriver):
         updates = None
         with temp_lvm_device(self, src_vref):
             with temp_snapshot(self, volume, src_vref) as snapshot:
-                updates = self._create_n_copy_volume(volume, snapshot)
+                updates = self._create_and_copy_volume(volume, snapshot)
 
         return updates
 
@@ -638,7 +652,7 @@ class SRBDriver(driver.VolumeDriver):
         If 'refresh' is True, run the update first.
         """
         stats = {
-            'vendor_name': 'Scality - Open Source',
+            'vendor_name': 'Scality',
             'driver_version': self.VERSION,
             'storage_protocol': 'Scality Rest Block Device',
             'total_capacity_gb': 'infinite',
@@ -683,7 +697,7 @@ class SRBISCSIDriver(SRBDriver, driver.ISCSIDriver):
 
     This driver manages volumes provisioned by the Scality REST Block driver
     Linux kernel module, backed by RESTful storage providers (e.g. Scality
-    CDMA), and exports them through ISCSI to Nova.
+    CDMI), and exports them through ISCSI to Nova.
     """
 
     VERSION = '0.1.0'
