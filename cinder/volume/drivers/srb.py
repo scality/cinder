@@ -80,10 +80,12 @@ class retry:
 
             for attempt in xrange(self._count):
                 if attempt != 0:
-                    LOG.warning(
-                        _LW("Retrying failed call to %s, attempt %i"),
-                        func_name, attempt)
+                    msg = _LW('Retrying failed call to %(func)s, attempt '
+                              '%(attempt)i') \
+                        % {'func': func_name,
+                           'attempt': attempt}
 
+                    LOG.warning(msg)
                 try:
                     return fun(*args, **kwargs)
                 except self._exceptions:
@@ -434,7 +436,7 @@ class SRBDriver(driver.VolumeDriver):
             raise exception.VolumeBackendAPIException(
                 ("Internal error in srb driver: "
                  "Trying to detach detached volume %s")
-                 % (self._get_volname(volume))
+                % (self._get_volname(volume))
             )
 
         self._attached_devices[volid] -= 1
@@ -508,8 +510,10 @@ class SRBDriver(driver.VolumeDriver):
 
         count = self._get_attached_count(volume)
         if count > 1:
-            LOG.info(_LI('Reference count of %s is %d, not detaching'),
-                     volume['name'], count)
+            LOG.info(_LI('Reference count of %(volume)s is %(count)d, '
+                         'not detaching')
+                     % {'volume': volume['name'],
+                        'count': count})
             return
 
         message = ('Could not detach volume %(vol)s from device %(dev)s'
