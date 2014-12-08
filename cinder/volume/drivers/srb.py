@@ -409,9 +409,10 @@ class SRBDriver(driver.VolumeDriver):
     def _destroy_file(volume):
         message = 'Could not destroy volume on any configured REST server'
 
+        volname = volume['name']
         with handle_process_execution_error(
                 message=message,
-                info_message=_LI('Error destroying Volume'),
+                info_message=_LI('Error destroying Volume %s') % volname,
                 reraise=exception.VolumeBackendAPIException(data=message)):
             cmd = 'echo ' + volume['name'] + ' > /sys/class/srb/destroy'
             putils.execute('/bin/sh', '-c', cmd,
