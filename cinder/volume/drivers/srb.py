@@ -810,10 +810,13 @@ class SRBISCSIDriver(SRBDriver, driver.ISCSIDriver):
     VERSION = '1.0.0'
 
     def __init__(self, *args, **kwargs):
+        self.target_driver = None
+
+        super(SRBISCSIDriver, self).__init__(*args, **kwargs)
+
         self.db = kwargs.get('db')
         self.target_driver = \
             self.target_mapping[self.configuration.safe_get('iscsi_helper')]
-        super(SRBISCSIDriver, self).__init__(*args, **kwargs)
         self.backend_name =\
             self.configuration.safe_get('volume_backend_name') or 'SRB_iSCSI'
         self.protocol = 'iSCSI'
