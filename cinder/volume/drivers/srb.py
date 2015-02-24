@@ -29,6 +29,7 @@ from oslo_concurrency import lockutils
 from oslo_concurrency import processutils as putils
 from oslo_config import cfg
 from oslo_utils import excutils
+from oslo_utils import importutils
 from oslo_utils import units
 import six
 
@@ -833,8 +834,13 @@ class SRBISCSIDriver(SRBDriver, driver.ISCSIDriver):
         super(SRBISCSIDriver, self).__init__(*args, **kwargs)
 
         self.db = kwargs.get('db')
-        self.target_driver = \
+
+        target_driver = \
             self.target_mapping[self.configuration.safe_get('iscsi_helper')]
+        self.target_driver = importutils.import_object(
+            target_driver,
+            configuration=self.configuration,
+            db=self.db)
         self.backend_name =\
             self.configuration.safe_get('volume_backend_name') or 'SRB_iSCSI'
         self.protocol = 'iSCSI'
