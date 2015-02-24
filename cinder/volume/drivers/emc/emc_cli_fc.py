@@ -1,4 +1,4 @@
-# Copyright (c) 2012 - 2014 EMC Corporation, Inc.
+# Copyright (c) 2012 - 2015 EMC Corporation, Inc.
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -47,6 +47,12 @@ class EMCCLIFCDriver(driver.FibreChannelDriver):
                 External Volume Management, Read-only Volume,
                 FC Auto Zoning
         4.1.0 - Consistency group support
+        5.0.0 - Performance enhancement, LUN Number Threshold Support,
+                Initiator Auto Deregistration,
+                Force Deleting LUN in Storage Groups,
+                robust enhancement
+        5.1.0 - iSCSI multipath enhancement
+        5.2.0 - Pool-aware scheduler support
     """
 
     def __init__(self, *args, **kwargs):
@@ -158,25 +164,18 @@ class EMCCLIFCDriver(driver.FibreChannelDriver):
         """
         conn_info = self.cli.initialize_connection(volume,
                                                    connector)
-        conn_info = self.cli.adjust_fc_conn_info(conn_info, connector)
         LOG.debug("Exit initialize_connection"
                   " - Returning FC connection info: %(conn_info)s."
                   % {'conn_info': conn_info})
-
         return conn_info
 
     @RemoveFCZone
     def terminate_connection(self, volume, connector, **kwargs):
         """Disallow connection from connector."""
-        remove_zone = self.cli.terminate_connection(volume, connector)
-        conn_info = {'driver_volume_type': 'fibre_channel',
-                     'data': {}}
-        conn_info = self.cli.adjust_fc_conn_info(conn_info, connector,
-                                                 remove_zone)
+        conn_info = self.cli.terminate_connection(volume, connector)
         LOG.debug("Exit terminate_connection"
                   " - Returning FC connection info: %(conn_info)s."
                   % {'conn_info': conn_info})
-
         return conn_info
 
     def get_volume_stats(self, refresh=False):
@@ -236,3 +235,7 @@ class EMCCLIFCDriver(driver.FibreChannelDriver):
     def delete_cgsnapshot(self, context, cgsnapshot):
         """Deletes a cgsnapshot."""
         return self.cli.delete_cgsnapshot(self, context, cgsnapshot)
+
+    def get_pool(self, volume):
+        """Returns the pool name of a volume."""
+        return self.cli.get_pool(volume)

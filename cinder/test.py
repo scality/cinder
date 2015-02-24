@@ -29,12 +29,12 @@ import uuid
 import fixtures
 import mock
 import mox
-from oslo.config import cfg
-from oslo.config import fixture as config_fixture
 from oslo.messaging import conffixture as messaging_conffixture
-from oslo.utils import strutils
-from oslo.utils import timeutils
 from oslo_concurrency import lockutils
+from oslo_config import cfg
+from oslo_config import fixture as config_fixture
+from oslo_utils import strutils
+from oslo_utils import timeutils
 import stubout
 import testtools
 
@@ -189,6 +189,7 @@ class TestCase(testtools.TestCase):
             config_fixture.Config(lockutils.CONF))
         self.fixture.config(lock_path=lock_path,
                             group='oslo_concurrency')
+        lockutils.set_defaults(lock_path)
         self.override_config('policy_file',
                              os.path.join(
                                  os.path.abspath(

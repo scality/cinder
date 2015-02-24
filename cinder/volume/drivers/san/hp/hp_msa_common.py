@@ -19,7 +19,7 @@ Volume driver common utilities for HP MSA Storage array
 import base64
 import uuid
 
-from oslo.config import cfg
+from oslo_config import cfg
 
 from cinder import exception
 from cinder.i18n import _LE
@@ -226,7 +226,7 @@ class HPMSACommon(object):
                 return
             raise exception.Invalid(ex)
 
-    def get_volume_stats(self, refresh):
+    def get_volume_stats(self, refresh=False):
         if refresh:
             self._update_volume_stats()
 

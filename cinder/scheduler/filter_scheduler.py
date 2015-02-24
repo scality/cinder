@@ -20,7 +20,7 @@ You can customize this scheduler by specifying your own volume Filters and
 Weighing Functions.
 """
 
-from oslo.config import cfg
+from oslo_config import cfg
 
 from cinder import exception
 from cinder.i18n import _, _LW
@@ -169,7 +169,7 @@ class FilterScheduler(driver.Scheduler):
         return top_host.obj
 
     def get_pools(self, context, filters):
-        #TODO(zhiteng) Add filters support
+        # TODO(zhiteng) Add filters support
         return self.host_manager.get_pools(context)
 
     def _post_select_populate_filter_properties(self, filter_properties,

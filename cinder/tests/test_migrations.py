@@ -24,9 +24,9 @@ import uuid
 
 from migrate.versioning import api as migration_api
 from migrate.versioning import repository
-from oslo.db.sqlalchemy import test_base
-from oslo.db.sqlalchemy import test_migrations
-from oslo.db.sqlalchemy import utils as db_utils
+from oslo_db.sqlalchemy import test_base
+from oslo_db.sqlalchemy import test_migrations
+from oslo_db.sqlalchemy import utils as db_utils
 import sqlalchemy
 
 from cinder.db import migration
@@ -759,3 +759,8 @@ class TestMysqlMigrations(test_base.MySQLOpportunisticTestCase,
             "and TABLE_NAME!='migrate_version'")
         count = noninnodb.scalar()
         self.assertEqual(count, 0, "%d non InnoDB tables created" % count)
+
+
+class TestPostgresqlMigrations(test_base.PostgreSQLOpportunisticTestCase,
+                               MigrationsMixin):
+    TIME_TYPE = sqlalchemy.types.TIMESTAMP

@@ -21,9 +21,9 @@ import time
 import traceback
 
 import mock
-from oslo.config import cfg
-from oslo.utils import units
 from oslo_concurrency import processutils as putils
+from oslo_config import cfg
+from oslo_utils import units
 
 from cinder import brick
 from cinder import compute
@@ -92,6 +92,9 @@ class GlusterFsDriverTestCase(test.TestCase):
         self._configuration.glusterfs_qcow2_volumes = False
         self._configuration.nas_secure_file_permissions = 'false'
         self._configuration.nas_secure_file_operations = 'false'
+        self._configuration.nas_ip = None
+        self._configuration.nas_share_path = None
+        self._configuration.nas_mount_options = None
 
         self._driver =\
             glusterfs.GlusterfsDriver(configuration=self._configuration,

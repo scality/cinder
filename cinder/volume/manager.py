@@ -39,12 +39,13 @@ intact.
 
 import time
 
-from oslo.config import cfg
 from oslo import messaging
-from oslo.serialization import jsonutils
-from oslo.utils import excutils
-from oslo.utils import importutils
-from oslo.utils import timeutils
+from oslo_config import cfg
+from oslo_serialization import jsonutils
+from oslo_utils import excutils
+from oslo_utils import importutils
+from oslo_utils import timeutils
+from oslo_utils import uuidutils
 from osprofiler import profiler
 
 from cinder import compute
@@ -56,7 +57,6 @@ from cinder.image import glance
 from cinder import manager
 from cinder.openstack.common import log as logging
 from cinder.openstack.common import periodic_task
-from cinder.openstack.common import uuidutils
 from cinder import quota
 from cinder import utils
 from cinder.volume.configuration import Configuration
@@ -107,7 +107,11 @@ MAPPING = {
     'cinder.volume.drivers.huawei.huawei_hvs.HuaweiHVSISCSIDriver':
     'cinder.volume.drivers.huawei.huawei_18000.Huawei18000ISCSIDriver',
     'cinder.volume.drivers.huawei.huawei_hvs.HuaweiHVSFCDriver':
-    'cinder.volume.drivers.huawei.huawei_18000.Huawei18000FCDriver', }
+    'cinder.volume.drivers.huawei.huawei_18000.Huawei18000FCDriver',
+    'cinder.volume.drivers.fujitsu_eternus_dx_fc.FJDXFCDriver':
+    'cinder.volume.drivers.fujitsu.eternus_dx_fc.FJDXFCDriver',
+    'cinder.volume.drivers.fujitsu_eternus_dx_iscsi.FJDXISCSIDriver':
+    'cinder.volume.drivers.fujitsu.eternus_dx_iscsi.FJDXISCSIDriver', }
 
 
 def locked_volume_operation(f):
@@ -564,6 +568,11 @@ class VolumeManager(manager.SchedulerDependentManager):
             try:
                 self.db.volume_glance_metadata_copy_to_snapshot(
                     context, snapshot_ref['id'], volume_id)
+            except exception.GlanceMetadataNotFound:
+                # If volume is not created from image, No glance metadata
+                # would be available for that volume in
+                # volume glance metadata table
+                pass
             except exception.CinderException as ex:
                 LOG.exception(_LE("Failed updating %(snapshot_id)s"
                                   " metadata using the provided volumes"
@@ -886,8 +895,10 @@ class VolumeManager(manager.SchedulerDependentManager):
         utils.require_driver_initialized(self.driver)
         try:
             self.driver.validate_connector(connector)
+        except exception.InvalidConnectorException as err:
+            raise exception.InvalidInput(reason=err)
         except Exception as err:
-            err_msg = (_('Unable to fetch connection information from '
+            err_msg = (_('Unable to validate connector information in '
                          'backend: %(err)s') % {'err': err})
             LOG.error(err_msg)
             raise exception.VolumeBackendAPIException(data=err_msg)
@@ -1109,9 +1120,7 @@ class VolumeManager(manager.SchedulerDependentManager):
         new_volume = self.db.volume_get(ctxt, new_volume_id)
         rpcapi = volume_rpcapi.VolumeAPI()
 
-        status_update = {}
-        if volume['status'] == 'retyping':
-            status_update = {'status': self._get_original_status(volume)}
+        orig_volume_status = self._get_original_status(volume)
 
         if error:
             msg = _("migrate_volume_completion is cleaning up an error "
@@ -1120,9 +1129,7 @@ class VolumeManager(manager.SchedulerDependentManager):
                             'vol2': new_volume['id']})
             new_volume['migration_status'] = None
             rpcapi.delete_volume(ctxt, new_volume)
-            updates = {'migration_status': None}
-            if status_update:
-                updates.update(status_update)
+            updates = {'migration_status': None, 'status': orig_volume_status}
             self.db.volume_update(ctxt, volume_id, updates)
             return volume_id
 
@@ -1131,7 +1138,7 @@ class VolumeManager(manager.SchedulerDependentManager):
 
         # Delete the source volume (if it fails, don't fail the migration)
         try:
-            if status_update.get('status') == 'in-use':
+            if orig_volume_status == 'in-use':
                 self.detach_volume(ctxt, volume_id)
             self.delete_volume(ctxt, volume_id)
         except Exception as ex:
@@ -1146,16 +1153,14 @@ class VolumeManager(manager.SchedulerDependentManager):
                                       new_volume)
         self.db.finish_volume_migration(ctxt, volume_id, new_volume_id)
         self.db.volume_destroy(ctxt, new_volume_id)
-        if status_update.get('status') == 'in-use':
-            updates = {'migration_status': 'completing'}
-            updates.update(status_update)
+        if orig_volume_status == 'in-use':
+            updates = {'migration_status': 'completing',
+                       'status': orig_volume_status}
         else:
             updates = {'migration_status': None}
         self.db.volume_update(ctxt, volume_id, updates)
 
-        if 'in-use' in (status_update.get('status'), volume['status']):
-            # NOTE(jdg): if we're passing the ref here, why are we
-            # also passing in the various fields from that ref?
+        if orig_volume_status == 'in-use':
             rpcapi.attach_volume(ctxt,
                                  volume,
                                  volume['instance_uuid'],

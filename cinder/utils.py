@@ -35,11 +35,12 @@ from xml import sax
 from xml.sax import expatreader
 from xml.sax import saxutils
 
-from oslo.config import cfg
-from oslo.utils import importutils
-from oslo.utils import timeutils
 from oslo_concurrency import lockutils
 from oslo_concurrency import processutils
+from oslo_config import cfg
+from oslo_utils import importutils
+from oslo_utils import timeutils
+import retrying
 import six
 
 from cinder.brick.initiator import connector
@@ -274,37 +275,6 @@ def last_completed_audit_period(unit=None):
         begin = end - datetime.timedelta(hours=1)
 
     return (begin, end)
-
-
-class LazyPluggable(object):
-    """A pluggable backend loaded lazily based on some value."""
-
-    def __init__(self, pivot, **backends):
-        self.__backends = backends
-        self.__pivot = pivot
-        self.__backend = None
-
-    def __get_backend(self):
-        if not self.__backend:
-            backend_name = CONF[self.__pivot]
-            if backend_name not in self.__backends:
-                raise exception.Error(_('Invalid backend: %s') % backend_name)
-
-            backend = self.__backends[backend_name]
-            if isinstance(backend, tuple):
-                name = backend[0]
-                fromlist = backend[1]
-            else:
-                name = backend
-                fromlist = backend
-
-            self.__backend = __import__(name, None, None, fromlist)
-            LOG.debug('backend %s', self.__backend)
-        return self.__backend
-
-    def __getattr__(self, key):
-        backend = self.__get_backend()
-        return getattr(backend, key)
 
 
 class ProtectedExpatParser(expatreader.ExpatParser):
@@ -573,14 +543,23 @@ def get_root_helper():
     return 'sudo cinder-rootwrap %s' % CONF.rootwrap_config
 
 
-def brick_get_connector_properties():
+def brick_get_connector_properties(multipath=False, enforce_multipath=False):
     """wrapper for the brick calls to automatically set
     the root_helper needed for cinder.
+
+    :param multipath:         A boolean indicating whether the connector can
+                              support multipath.
+    :param enforce_multipath: If True, it raises exception when multipath=True
+                              is specified but multipathd is not running.
+                              If False, it falls back to multipath=False
+                              when multipathd is not running.
     """
 
     root_helper = get_root_helper()
     return connector.get_connector_properties(root_helper,
-                                              CONF.my_ip)
+                                              CONF.my_ip,
+                                              multipath,
+                                              enforce_multipath)
 
 
 def brick_get_connector(protocol, driver=None,
@@ -766,3 +745,39 @@ def is_blk_device(dev):
     except Exception:
         LOG.debug('Path %s not found in is_blk_device check' % dev)
         return False
+
+
+def retry(exceptions, interval=1, retries=3, backoff_rate=2):
+
+    def _retry_on_exception(e):
+        return isinstance(e, exceptions)
+
+    def _backoff_sleep(previous_attempt_number, delay_since_first_attempt_ms):
+        exp = backoff_rate ** previous_attempt_number
+        wait_for = max(0, interval * exp)
+        LOG.debug("Sleeping for %s seconds", wait_for)
+        return wait_for * 1000.0
+
+    def _print_stop(previous_attempt_number, delay_since_first_attempt_ms):
+        delay_since_first_attempt = delay_since_first_attempt_ms / 1000.0
+        LOG.debug("Failed attempt %s", previous_attempt_number)
+        LOG.debug("Have been at this for %s seconds",
+                  delay_since_first_attempt)
+        return previous_attempt_number == retries
+
+    if retries < 1:
+        raise ValueError('Retries must be greater than or '
+                         'equal to 1 (received: %s). ' % retries)
+
+    def _decorator(f):
+
+        @six.wraps(f)
+        def _wrapper(*args, **kwargs):
+            r = retrying.Retrying(retry_on_exception=_retry_on_exception,
+                                  wait_func=_backoff_sleep,
+                                  stop_func=_print_stop)
+            return r.call(f, *args, **kwargs)
+
+        return _wrapper
+
+    return _decorator

@@ -25,9 +25,9 @@ for more details.
 
 import uuid
 
-from oslo.config import cfg
-from oslo.utils import importutils
-from oslo.utils import units
+from oslo_config import cfg
+from oslo_utils import importutils
+from oslo_utils import units
 import six
 
 
@@ -127,6 +127,11 @@ class DrbdManageDriver(driver.VolumeDriver):
 
     def check_for_setup_error(self):
         """Verify that requirements are in place to use DRBDmanage driver."""
+        if not all((dbus, dm_exc, dm_const, dm_utils)):
+            msg = _('DRBDmanage driver setup error: some required '
+                    'libraries (dbus, drbdmanage.*) not found.')
+            LOG.error(msg)
+            raise exception.VolumeDriverException(message=msg)
         if self.odm.ping() != 0:
             message = _('Cannot ping DRBDmanage backend')
             raise exception.VolumeBackendAPIException(data=message)
@@ -488,7 +493,7 @@ class DrbdManageDriver(driver.VolumeDriver):
             volume_path)
 
     def create_export(self, context, volume):
-        volume_path = self.local_path(volume),
+        volume_path = self.local_path(volume)
         export_info = self.target_driver.create_export(
             context,
             volume,

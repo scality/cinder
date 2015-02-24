@@ -11,12 +11,12 @@
 #    under the License.
 
 
-from oslo.config import cfg
-from oslo.utils import timeutils
-from oslo.utils import units
+from oslo_config import cfg
+from oslo_utils import timeutils
+from oslo_utils import units
 import taskflow.engines
 from taskflow.patterns import linear_flow
-from taskflow.utils import misc
+from taskflow.types import failure as ft
 
 from cinder import exception
 from cinder import flow_utils
@@ -231,7 +231,7 @@ class ExtractVolumeRequestTask(flow_utils.CinderTask):
         # exist, this is expected as it signals that the image_id is missing.
         image_meta = self.image_service.show(context, image_id)
 
-        #check whether image is active
+        # check whether image is active
         if image_meta['status'] != 'active':
             msg = _('Image %(image_id)s is not active.')\
                 % {'image_id': image_id}
@@ -464,7 +464,6 @@ class EntryCreateTask(flow_utils.CinderTask):
         super(EntryCreateTask, self).__init__(addons=[ACTION],
                                               requires=requires)
         self.db = db
-        self.provides.update()
 
     def execute(self, context, optional_args, **kwargs):
         """Creates a database entry for the given inputs and returns details.
@@ -510,7 +509,7 @@ class EntryCreateTask(flow_utils.CinderTask):
 
     def revert(self, context, result, optional_args, **kwargs):
         # We never produced a result and therefore can't destroy anything.
-        if isinstance(result, misc.Failure):
+        if isinstance(result, ft.Failure):
             return
 
         if optional_args['is_quota_committed']:
@@ -595,7 +594,7 @@ class QuotaReserveTask(flow_utils.CinderTask):
 
     def revert(self, context, result, optional_args, **kwargs):
         # We never produced a result and therefore can't destroy anything.
-        if isinstance(result, misc.Failure):
+        if isinstance(result, ft.Failure):
             return
 
         if optional_args['is_quota_committed']:
@@ -641,7 +640,7 @@ class QuotaCommitTask(flow_utils.CinderTask):
 
     def revert(self, context, result, **kwargs):
         # We never produced a result and therefore can't destroy anything.
-        if isinstance(result, misc.Failure):
+        if isinstance(result, ft.Failure):
             return
         volume = result['volume_properties']
         try:
@@ -749,7 +748,7 @@ class VolumeCastTask(flow_utils.CinderTask):
         self._cast_create_volume(context, request_spec, filter_properties)
 
     def revert(self, context, result, flow_failures, **kwargs):
-        if isinstance(result, misc.Failure):
+        if isinstance(result, ft.Failure):
             return
 
         # Restore the source volume status and set the volume to error status.

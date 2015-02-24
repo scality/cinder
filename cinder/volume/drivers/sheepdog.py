@@ -20,9 +20,9 @@ SheepDog Volume Driver.
 """
 import re
 
-from oslo.config import cfg
-from oslo.utils import units
 from oslo_concurrency import processutils
+from oslo_config import cfg
+from oslo_utils import units
 
 from cinder import exception
 from cinder.i18n import _, _LE
@@ -50,9 +50,9 @@ class SheepdogDriver(driver.VolumeDriver):
     def check_for_setup_error(self):
         """Return error if prerequisites aren't met."""
         try:
-            #NOTE(francois-charlier) Since 0.24 'collie cluster info -r'
-            #  gives short output, but for compatibility reason we won't
-            #  use it and just check if 'running' is in the output.
+            # NOTE(francois-charlier) Since 0.24 'collie cluster info -r'
+            # gives short output, but for compatibility reason we won't
+            # use it and just check if 'running' is in the output.
             (out, _err) = self._execute('collie', 'cluster', 'info')
             if 'status: running' not in out:
                 exception_message = (_("Sheepdog is not working: %s") % out)
@@ -77,7 +77,8 @@ class SheepdogDriver(driver.VolumeDriver):
         self._try_execute('qemu-img', 'create', '-b',
                           "sheepdog:%s:%s" % (snapshot['volume_name'],
                                               snapshot['name']),
-                          "sheepdog:%s" % volume['name'])
+                          "sheepdog:%s" % volume['name'],
+                          '%sG' % volume['size'])
 
     def delete_volume(self, volume):
         """Delete a logical volume."""

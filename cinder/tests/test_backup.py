@@ -20,9 +20,9 @@ Tests for Backup code.
 import tempfile
 
 import mock
-from oslo.config import cfg
-from oslo.utils import importutils
-from oslo.utils import timeutils
+from oslo_config import cfg
+from oslo_utils import importutils
+from oslo_utils import timeutils
 
 from cinder.backup import manager
 from cinder import context
@@ -527,7 +527,7 @@ class BackupTestCase(BaseBackupTest):
         export['backup_service'] = 'cinder.tests.backup.bad_service'
         imported_record = self._create_export_record_db_entry()
 
-        #Test the case where the additional hosts list is empty
+        # Test the case where the additional hosts list is empty
         backup_hosts = []
         self.assertRaises(exception.ServiceNotFound,
                           self.backup_mgr.import_record,
@@ -537,8 +537,8 @@ class BackupTestCase(BaseBackupTest):
                           export['backup_url'],
                           backup_hosts)
 
-        #Test that the import backup keeps calling other hosts to find a
-        #suitable host for the backup service
+        # Test that the import backup keeps calling other hosts to find a
+        # suitable host for the backup service
         backup_hosts = ['fake1', 'fake2']
         BackupAPI_import = 'cinder.backup.rpcapi.BackupAPI.import_record'
         with mock.patch(BackupAPI_import) as _mock_backup_import:

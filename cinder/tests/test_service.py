@@ -22,9 +22,9 @@ Unit Tests for remote procedure calls using queue
 
 import mock
 import mox
-from oslo.config import cfg
-from oslo.db import exception as db_exc
 from oslo_concurrency import processutils
+from oslo_config import cfg
+from oslo_db import exception as db_exc
 
 from cinder import context
 from cinder import db
@@ -219,20 +219,6 @@ class TestWSGIService(test.TestCase):
         test_service.start()
         self.assertNotEqual(0, test_service.port)
         test_service.stop()
-
-    def test_reset_pool_size_to_default(self):
-        test_service = service.WSGIService("test_service")
-        test_service.start()
-
-        # Stopping the service, which in turn sets pool size to 0
-        test_service.stop()
-        self.assertEqual(test_service.server._pool.size, 0)
-
-        # Resetting pool size to default
-        test_service.reset()
-        test_service.start()
-        self.assertEqual(test_service.server._pool.size,
-                         1000)
 
     @mock.patch('cinder.wsgi.Server')
     def test_workers_set_default(self, wsgi_server):

@@ -24,7 +24,7 @@ SHOULD include dedicated exception logging.
 
 import sys
 
-from oslo.config import cfg
+from oslo_config import cfg
 import six
 import webob.exc
 
@@ -389,7 +389,6 @@ class FileNotFound(NotFound):
     message = _("File %(file_path)s could not be found.")
 
 
-#TODO(bcwaldon): EOL this exception!
 class Duplicate(CinderException):
     pass
 
@@ -444,13 +443,13 @@ class QuotaError(CinderException):
 
 
 class VolumeSizeExceedsAvailableQuota(QuotaError):
-    message = _("Requested volume or snapshot exceeds allowed Gigabytes "
+    message = _("Requested volume or snapshot exceeds allowed gigabytes "
                 "quota. Requested %(requested)sG, quota is %(quota)sG and "
                 "%(consumed)sG has been consumed.")
 
 
 class VolumeBackupSizeExceedsAvailableQuota(QuotaError):
-    message = _("Requested backup exceeds allowed Backup Gigabytes "
+    message = _("Requested backup exceeds allowed Backup gigabytes "
                 "quota. Requested %(requested)sG, quota is %(quota)sG and "
                 "%(consumed)sG has been consumed.")
 
@@ -490,6 +489,10 @@ class MalformedResponse(VolumeDriverException):
 
 class FailedCmdWithDump(VolumeDriverException):
     message = _("Operation failed with status=%(status)s. Full dump: %(data)s")
+
+
+class InvalidConnectorException(VolumeDriverException):
+    message = _("Connector doesn't have required information: %(missing)s")
 
 
 class GlanceMetadataExists(Invalid):
@@ -689,10 +692,6 @@ class PureDriverException(VolumeDriverException):
     message = _("Pure Storage Cinder driver failure: %(reason)s")
 
 
-class PureAPIException(VolumeBackendAPIException):
-    message = _("Bad response from Pure Storage REST API: %(reason)s")
-
-
 # Zadara
 class ZadaraException(VolumeDriverException):
     message = _('Zadara Cinder Driver exception.')
@@ -722,7 +721,7 @@ class BadHTTPResponseStatus(ZadaraException):
     message = _("Bad HTTP response status %(status)s")
 
 
-#SolidFire
+# SolidFire
 class SolidFireAPIException(VolumeBackendAPIException):
     message = _("Bad response from SolidFire API")
 
@@ -844,23 +843,8 @@ class NetAppDriverException(VolumeDriverException):
 
 
 class EMCVnxCLICmdError(VolumeBackendAPIException):
-    def __init__(self, cmd=None, rc=None, out='',
-                 log_as_error=True, **kwargs):
-        self.cmd = cmd
-        self.rc = rc
-        self.out = out
-        msg = _("EMCVnxCLICmdError : %(cmd)s "
-                "(Return Code: %(rc)s) "
-                "(Output: %(out)s) ") % \
-            {'cmd': cmd,
-             'rc': rc,
-             'out': out.split('\n')}
-        kwargs["data"] = msg
-        super(EMCVnxCLICmdError, self).__init__(**kwargs)
-        if log_as_error:
-            LOG.error(msg)
-        else:
-            LOG.warn(msg)
+    message = _("EMC VNX Cinder Driver CLI exception: %(cmd)s "
+                "(Return Code: %(rc)s) (Output: %(out)s).")
 
 
 # ConsistencyGroup
@@ -903,6 +887,10 @@ class HBSDNotFound(NotFound):
     message = _("Storage resource could not be found.")
 
 
+class HBSDVolumeIsBusy(VolumeIsBusy):
+    message = _("Volume %(volume_name)s is busy.")
+
+
 # Datera driver
 class DateraAPIException(VolumeBackendAPIException):
     message = _("Bad response from Datera API")
@@ -919,6 +907,14 @@ class ISCSITargetRemoveFailed(CinderException):
 
 class ISCSITargetAttachFailed(CinderException):
     message = _("Failed to attach iSCSI target for volume %(volume_id)s.")
+
+
+class ISCSITargetDetachFailed(CinderException):
+    message = _("Failed to detach iSCSI target for volume %(volume_id)s.")
+
+
+class ISCSITargetHelperCommandFailed(CinderException):
+    message = _("%(error_message)s")
 
 
 # X-IO driver exception.

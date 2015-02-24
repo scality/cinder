@@ -21,8 +21,8 @@ operations on the SAN.
 """
 
 from lxml import etree
-from oslo.utils import units
 from oslo_concurrency import processutils
+from oslo_utils import units
 
 from cinder import exception
 from cinder.i18n import _, _LE
@@ -415,7 +415,7 @@ class HPLeftHandCLIQProxy(SanISCSIDriver):
         cliq_args['serverName'] = connector['host']
         self._cliq_run_xml("unassignVolumeToServer", cliq_args)
 
-    def get_volume_stats(self, refresh):
+    def get_volume_stats(self, refresh=False):
         if refresh:
             self._update_backend_status()
 

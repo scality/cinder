@@ -21,9 +21,9 @@ import os
 import tempfile
 import urllib
 
-from oslo.config import cfg
-from oslo.utils import encodeutils
-from oslo.utils import units
+from oslo_config import cfg
+from oslo_utils import encodeutils
+from oslo_utils import units
 import six
 
 from cinder import exception
@@ -482,6 +482,13 @@ class RBDDriver(driver.VolumeDriver):
             finally:
                 src_volume.close()
 
+        if volume['size'] != src_vref['size']:
+            LOG.debug("resize volume '%(dst_vol)s' from %(src_size)d to "
+                      "%(dst_size)d" %
+                      {'dst_vol': volume['name'], 'src_size': src_vref['size'],
+                       'dst_size': volume['size']})
+            self._resize(volume)
+
         LOG.debug("clone created successfully")
 
     def create_volume(self, volume):
@@ -805,7 +812,9 @@ class RBDDriver(driver.VolumeDriver):
                       dict(loc=image_location, err=e))
             return False
 
-    def clone_image(self, volume, image_location, image_meta):
+    def clone_image(self, context, volume,
+                    image_location, image_meta,
+                    image_service):
         image_location = image_location[0] if image_location else None
         if image_location is None or not self._is_cloneable(
                 image_location, image_meta):

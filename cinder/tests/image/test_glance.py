@@ -18,7 +18,7 @@ import datetime
 
 import glanceclient.exc
 import mock
-from oslo.config import cfg
+from oslo_config import cfg
 
 from cinder import context
 from cinder import exception
@@ -97,7 +97,6 @@ class TestGlanceImageService(test.TestCase):
 
     def setUp(self):
         super(TestGlanceImageService, self).setUp()
-        #fakes.stub_out_compute_api_snapshot(self.stubs)
 
         client = glance_stubs.StubGlanceClient()
         self.service = self._create_image_service(client)

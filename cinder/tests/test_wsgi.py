@@ -19,18 +19,19 @@
 import os.path
 import re
 import socket
+import ssl
 import tempfile
 import time
 import urllib2
 
 import mock
-from oslo.config import cfg
+from oslo_config import cfg
+from oslo_i18n import fixture as i18n_fixture
 import testtools
 import webob
 import webob.dec
 
 from cinder import exception
-from cinder import i18n
 from cinder.i18n import _
 from cinder import test
 import cinder.wsgi
@@ -42,7 +43,17 @@ TEST_VAR_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__),
 
 
 def open_no_proxy(*args, **kwargs):
-    opener = urllib2.build_opener(urllib2.ProxyHandler({}))
+    # NOTE(coreycb):
+    # Deal with more secure certification chain verficiation
+    # introduced in python 2.7.9 under PEP-0476
+    # https://github.com/python/peps/blob/master/pep-0476.txt
+    if hasattr(ssl, "_create_unverified_context"):
+        opener = urllib2.build_opener(
+            urllib2.ProxyHandler({}),
+            urllib2.HTTPSHandler(context=ssl._create_unverified_context())
+        )
+    else:
+        opener = urllib2.build_opener(urllib2.ProxyHandler({}))
     return opener.open(*args, **kwargs)
 
 
@@ -129,7 +140,7 @@ class TestWSGIServer(test.TestCase):
     def test_server_pool_waitall(self):
         # test pools waitall method gets called while stopping server
         server = cinder.wsgi.Server("test_server", None,
-                                    host="127.0.0.1", port=4444)
+                                    host="127.0.0.1")
         server.start()
         with mock.patch.object(server._pool,
                                'waitall') as mock_waitall:
@@ -256,7 +267,7 @@ class ExceptionTest(test.TestCase):
 
     def setUp(self):
         super(ExceptionTest, self).setUp()
-        i18n.enable_lazy()
+        self.useFixture(i18n_fixture.ToggleLazy(True))
 
     def _wsgi_app(self, inner_app):
         # NOTE(luisg): In order to test localization, we need to

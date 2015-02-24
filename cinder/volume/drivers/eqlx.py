@@ -21,9 +21,9 @@ import random
 import eventlet
 from eventlet import greenthread
 import greenlet
-from oslo.config import cfg
-from oslo.utils import excutils
 from oslo_concurrency import processutils
+from oslo_config import cfg
+from oslo_utils import excutils
 
 from cinder import exception
 from cinder.i18n import _, _LE, _LW, _LI
@@ -37,26 +37,31 @@ LOG = logging.getLogger(__name__)
 eqlx_opts = [
     cfg.StrOpt('eqlx_group_name',
                default='group-0',
-               help='Group name to use for creating volumes'),
+               help='Group name to use for creating volumes. Defaults to '
+                    '"group-0".'),
     cfg.IntOpt('eqlx_cli_timeout',
                default=30,
-               help='Timeout for the Group Manager cli command execution'),
+               help='Timeout for the Group Manager cli command execution. '
+                    'Default is 30.'),
     cfg.IntOpt('eqlx_cli_max_retries',
                default=5,
-               help='Maximum retry count for reconnection'),
+               help='Maximum retry count for reconnection. Default is 5.'),
     cfg.BoolOpt('eqlx_use_chap',
                 default=False,
-                help='Use CHAP authentication for targets?'),
+                help='Use CHAP authentication for targets. Defaults to '
+                     '"False".'),
     cfg.StrOpt('eqlx_chap_login',
                default='admin',
-               help='Existing CHAP account name'),
+               help='Existing CHAP account name. Defaults to "admin".'),
     cfg.StrOpt('eqlx_chap_password',
                default='password',
-               help='Password for specified CHAP account name',
+               help='Password for specified CHAP account name. Defaults '
+                    'to "password".',
                secret=True),
     cfg.StrOpt('eqlx_pool',
                default='default',
-               help='Pool in which volumes will be created')
+               help='Pool in which volumes will be created. Defaults '
+                    'to "default".')
 ]
 
 
@@ -136,7 +141,16 @@ class DellEQLSanISCSIDriver(SanISCSIDriver):
         out = ''
         ending = '%s> ' % self.configuration.eqlx_group_name
         while out.find(ending) == -1:
-            out += chan.recv(102400)
+            ret = chan.recv(102400)
+            if len(ret) == 0:
+                # According to paramiko.channel.Channel documentation, which
+                # says "If a string of length zero is returned, the channel
+                # stream has closed". So we can confirm that the EQL server
+                # has closed the connection.
+                msg = _("The EQL array has closed the connection.")
+                LOG.error(msg)
+                raise exception.VolumeBackendAPIException(data=msg)
+            out += ret
 
         LOG.debug("CLI output\n%s", out)
         return out.splitlines()
@@ -217,7 +231,8 @@ class DellEQLSanISCSIDriver(SanISCSIDriver):
                         greenthread.sleep(random.randint(20, 500) / 100.0)
                 msg = (_("SSH Command failed after '%(total_attempts)r' "
                          "attempts : '%(command)s'") %
-                       {'total_attempts': total_attempts, 'command': command})
+                       {'total_attempts': total_attempts - attempts,
+                        'command': command})
                 raise exception.VolumeBackendAPIException(data=msg)
 
         except Exception:

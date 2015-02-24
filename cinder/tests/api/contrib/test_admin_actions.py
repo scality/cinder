@@ -13,11 +13,11 @@
 import ast
 
 import fixtures
-from oslo.config import cfg
-from oslo.config import fixture as config_fixture
-from oslo.serialization import jsonutils
-from oslo.utils import timeutils
 from oslo_concurrency import lockutils
+from oslo_config import cfg
+from oslo_config import fixture as config_fixture
+from oslo_serialization import jsonutils
+from oslo_utils import timeutils
 import webob
 from webob import exc
 
@@ -563,7 +563,7 @@ class AdminActionsTest(test.TestCase):
         connector = {}
         # start service to handle rpc messages for attach requests
         svc = self.start_service('volume', host='test')
-        self.assertRaises(exception.VolumeBackendAPIException,
+        self.assertRaises(exception.InvalidInput,
                           self.volume_api.initialize_connection,
                           ctx, volume, connector)
         # cleanup

@@ -12,7 +12,7 @@
 
 import abc
 
-from oslo.config import cfg
+from oslo_config import cfg
 import six
 
 CONF = cfg.CONF
@@ -63,6 +63,7 @@ class Target(object):
         """Allow connection to connector and return connection info."""
         pass
 
+    @abc.abstractmethod
     def terminate_connection(self, volume, connector, **kwargs):
         """Disallow connection from connector."""
         pass

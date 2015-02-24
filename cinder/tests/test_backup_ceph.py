@@ -21,8 +21,8 @@ import tempfile
 import uuid
 
 import mock
-from oslo.serialization import jsonutils
 from oslo_concurrency import processutils
+from oslo_serialization import jsonutils
 import six
 
 from cinder.backup import driver
@@ -643,6 +643,8 @@ class BackupCephTestCase(test.TestCase):
 
     @common_mocks
     def test_discard_bytes(self):
+        # Lower the chunksize to a memory managable number
+        self.service.chunk_size = 1024
         image = self.mock_rbd.Image.return_value
         wrapped_rbd = self._get_wrapped_rbd_io(image)
 
@@ -716,7 +718,6 @@ class BackupCephTestCase(test.TestCase):
             self.service.delete(self.backup)
             self.assertTrue(mock_del_backup_snap.called)
 
-        #self.assertFalse(self.mock_rbd.ImageNotFound.called)
         self.assertTrue(self.mock_rbd.RBD.return_value.list.called)
         self.assertTrue(self.mock_rbd.RBD.return_value.remove.called)
 

@@ -12,12 +12,12 @@
 
 import traceback
 
-from oslo.config import cfg
-from oslo.utils import timeutils
 from oslo_concurrency import processutils
+from oslo_config import cfg
+from oslo_utils import timeutils
 import taskflow.engines
 from taskflow.patterns import linear_flow
-from taskflow.utils import misc
+from taskflow.types import failure as ft
 
 from cinder import exception
 from cinder import flow_utils
@@ -184,7 +184,7 @@ class ExtractVolumeRefTask(flow_utils.CinderTask):
         return volume_ref
 
     def revert(self, context, volume_id, result, **kwargs):
-        if isinstance(result, misc.Failure):
+        if isinstance(result, ft.Failure):
             return
 
         common.error_out_volume(context, self.db, volume_id)
@@ -287,7 +287,7 @@ class ExtractVolumeSpecTask(flow_utils.CinderTask):
         return specs
 
     def revert(self, context, result, **kwargs):
-        if isinstance(result, misc.Failure):
+        if isinstance(result, ft.Failure):
             return
         volume_spec = result.get('volume_spec')
         # Restore the source volume status and set the volume to error status.
@@ -394,6 +394,11 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
                                           'vol_id': volume_id})
                 self._capture_volume_image_metadata(context, volume_id,
                                                     image_id, image_meta)
+        except exception.GlanceMetadataNotFound:
+            # If volume is not created from image, No glance metadata
+            # would be available for that volume in
+            # volume glance metadata table
+            pass
         except exception.CinderException as ex:
             LOG.exception(exception_template % {'src_type': src_type,
                                                 'src_id': src_id,
@@ -567,8 +572,11 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
         # NOTE (singn): two params need to be returned
         # dict containing provider_location for cloned volume
         # and clone status.
-        model_update, cloned = self.driver.clone_image(
-            volume_ref, image_location, image_meta)
+        model_update, cloned = self.driver.clone_image(context,
+                                                       volume_ref,
+                                                       image_location,
+                                                       image_meta,
+                                                       image_service)
         if not cloned:
             # TODO(harlowja): what needs to be rolled back in the clone if this
             # volume create fails?? Likely this should be a subflow or broken

@@ -1,4 +1,4 @@
-# Copyright (c) 2012 - 2014 EMC Corporation.
+# Copyright (c) 2012 - 2015 EMC Corporation.
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -12,8 +12,6 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
-import six
-
 from cinder import exception
 from cinder.i18n import _, _LE, _LI, _LW
 from cinder.openstack.common import log as logging
@@ -49,14 +47,12 @@ class EMCVMAXFast(object):
         isTieringPolicySupported = self.is_tiering_policy_enabled(
             conn, tierPolicyServiceInstanceName)
         if isTieringPolicySupported is None:
-            errorMessage = (_("Cannot determine whether "
-                              "Tiering Policy is support on this array."))
-            LOG.error(errorMessage)
+            LOG.error(_LE("Cannot determine whether "
+                          "Tiering Policy is supported on this array."))
 
         if isTieringPolicySupported is False:
-            errorMessage = (_("Tiering Policy is not "
-                              "supported on this array."))
-            LOG.error(errorMessage)
+            LOG.error(_LE("Tiering Policy is not "
+                          "supported on this array."))
         return isTieringPolicySupported
 
     def is_tiering_policy_enabled(self, conn, tierPolicyServiceInstanceName):
@@ -80,7 +76,7 @@ class EMCVMAXFast(object):
         tierPolicyCapabilityInstance = conn.GetInstance(
             tierPolicyCapabilityInstanceName, LocalOnly=False)
         propertiesList = (tierPolicyCapabilityInstance
-                          .properties.items())  # ['SupportsTieringPolicies']
+                          .properties.items())
         for properties in propertiesList:
             if properties[0] == 'SupportsTieringPolicies':
                 cimProperties = properties[1]
@@ -88,9 +84,8 @@ class EMCVMAXFast(object):
                 break
 
         if foundIsSupportsTieringPolicies is None:
-            exception_message = (_("Cannot determine if Tiering Policies "
-                                   "are supported"))
-            LOG.error(exception_message)
+            LOG.error(_LE("Cannot determine if Tiering Policies "
+                          "are supported."))
 
         return foundIsSupportsTieringPolicies
 
@@ -115,9 +110,8 @@ class EMCVMAXFast(object):
             conn, controllerConfigService)
 
         if not self._check_if_fast_supported(conn, storageSystemInstanceName):
-            exceptionMessage = (_(
-                "FAST is not supported on this array "))
-            LOG.error(exceptionMessage)
+            LOG.error(_LE(
+                "FAST is not supported on this array."))
             raise
 
         assocStorageGroupInstanceName = (
@@ -129,28 +123,26 @@ class EMCVMAXFast(object):
                                                   controllerConfigService,
                                                   defaultSgGroupName))
         if defaultStorageGroupInstanceName is None:
-            exceptionMessage = (_(
+            LOG.error(_LE(
                 "Unable to find default storage group "
-                "for FAST policy : %(fastPolicyName)s ")
-                % {'fastPolicyName': fastPolicyName})
-            LOG.error(exceptionMessage)
+                "for FAST policy : %(fastPolicyName)s."),
+                {'fastPolicyName': fastPolicyName})
             raise
 
         if assocStorageGroupInstanceName == defaultStorageGroupInstanceName:
             foundDefaultStorageGroupInstanceName = (
                 assocStorageGroupInstanceName)
         else:
-            errorMessage = (_LW(
+            LOG.warn(_LW(
                 "Volume: %(volumeName)s Does not belong "
-                "to storage storage group %(defaultSgGroupName)s. ")
-                % {'volumeName': volumeName,
-                   'defaultSgGroupName': defaultSgGroupName})
-            LOG.warn(errorMessage)
+                "to storage storage group %(defaultSgGroupName)s."),
+                {'volumeName': volumeName,
+                 'defaultSgGroupName': defaultSgGroupName})
         return foundDefaultStorageGroupInstanceName
 
     def add_volume_to_default_storage_group_for_fast_policy(
             self, conn, controllerConfigService, volumeInstance,
-            volumeName, fastPolicyName):
+            volumeName, fastPolicyName, extraSpecs):
         """Add a volume to the default storage group for FAST policy.
 
         The storage group must pre-exist.  Once added to the storage group,
@@ -161,6 +153,7 @@ class EMCVMAXFast(object):
         :param volumeInstance: the volume instance
         :param volumeName: the volume name (String)
         :param fastPolicyName: the fast policy name (String)
+        :param extraSpecs: additional info
         :returns: assocStorageGroupInstanceName - the storage group
                                                   associated with the volume
         """
@@ -170,17 +163,16 @@ class EMCVMAXFast(object):
         storageGroupInstanceName = self.utils.find_storage_masking_group(
             conn, controllerConfigService, defaultSgGroupName)
         if storageGroupInstanceName is None:
-            exceptionMessage = (_(
-                "Unable to create default storage group for"
-                " FAST policy : %(fastPolicyName)s ")
-                % {'fastPolicyName': fastPolicyName})
-            LOG.error(exceptionMessage)
+            LOG.error(_LE(
+                "Unable to create default storage group for "
+                "FAST policy : %(fastPolicyName)s."),
+                {'fastPolicyName': fastPolicyName})
             return failedRet
 
         self.provision.add_members_to_masking_group(
             conn, controllerConfigService, storageGroupInstanceName,
-            volumeInstance.path, volumeName)
-        # check to see if the volume is in the storage group
+            volumeInstance.path, volumeName, extraSpecs)
+        # Check to see if the volume is in the storage group.
         assocStorageGroupInstanceName = (
             self.utils.get_storage_group_from_volume(conn,
                                                      volumeInstance.path))
@@ -188,7 +180,7 @@ class EMCVMAXFast(object):
 
     def _create_default_storage_group(self, conn, controllerConfigService,
                                       fastPolicyName, storageGroupName,
-                                      volumeInstance):
+                                      volumeInstance, extraSpecs):
         """Create a first volume for the storage group.
 
         This is necessary because you cannot remove a volume if it is the
@@ -200,30 +192,29 @@ class EMCVMAXFast(object):
         :param fastPolicyName: the fast policy name (String)
         :param storageGroupName: the storage group name (String)
         :param volumeInstance: the volume instance
+        :param extraSpecs: additional info
         :returns: defaultstorageGroupInstanceName - instance name of the
                                                     default storage group
         """
         failedRet = None
         firstVolumeInstance = self._create_volume_for_default_volume_group(
-            conn, controllerConfigService, volumeInstance.path)
+            conn, controllerConfigService, volumeInstance.path, extraSpecs)
         if firstVolumeInstance is None:
-            exceptionMessage = (_(
-                "Failed to create a first volume for storage"
-                " group : %(storageGroupName)s ")
-                % {'storageGroupName': storageGroupName})
-            LOG.error(exceptionMessage)
+            LOG.error(_LE(
+                "Failed to create a first volume for storage "
+                "group : %(storageGroupName)s."),
+                {'storageGroupName': storageGroupName})
             return failedRet
 
         defaultStorageGroupInstanceName = (
             self.provision.create_and_get_storage_group(
                 conn, controllerConfigService, storageGroupName,
-                firstVolumeInstance.path))
+                firstVolumeInstance.path, extraSpecs))
         if defaultStorageGroupInstanceName is None:
-            exceptionMessage = (_(
+            LOG.error(_LE(
                 "Failed to create default storage group for "
-                "FAST policy : %(fastPolicyName)s ")
-                % {'fastPolicyName': fastPolicyName})
-            LOG.error(exceptionMessage)
+                "FAST policy : %(fastPolicyName)s."),
+                {'fastPolicyName': fastPolicyName})
             return failedRet
 
         storageSystemInstanceName = (
@@ -231,36 +222,37 @@ class EMCVMAXFast(object):
         tierPolicyServiceInstanceName = self.utils.get_tier_policy_service(
             conn, storageSystemInstanceName)
 
-        # get the fast policy instance name
+        # Get the fast policy instance name.
         tierPolicyRuleInstanceName = self._get_service_level_tier_policy(
             conn, tierPolicyServiceInstanceName, fastPolicyName)
         if tierPolicyRuleInstanceName is None:
-            exceptionMessage = (_(
+            LOG.error(_LE(
                 "Unable to get policy rule for fast policy: "
-                "%(fastPolicyName)s ")
-                % {'fastPolicyName': fastPolicyName})
-            LOG.error(exceptionMessage)
+                "%(fastPolicyName)s."),
+                {'fastPolicyName': fastPolicyName})
             return failedRet
 
-        # now associate it with a FAST policy
+        # Now associate it with a FAST policy.
         self.add_storage_group_to_tier_policy_rule(
             conn, tierPolicyServiceInstanceName,
             defaultStorageGroupInstanceName, tierPolicyRuleInstanceName,
-            storageGroupName, fastPolicyName)
+            storageGroupName, fastPolicyName, extraSpecs)
 
         return defaultStorageGroupInstanceName
 
     def _create_volume_for_default_volume_group(
-            self, conn, controllerConfigService, volumeInstanceName):
+            self, conn, controllerConfigService, volumeInstanceName,
+            extraSpecs):
         """Creates a volume for the default storage group for a fast policy.
 
         Creates a small first volume for the default storage group for a
         fast policy.  This is necessary because you cannot remove
-        the last volume from a storage group and this scenario is likely
+        the last volume from a storage group and this scenario is likely.
 
         :param conn: the connection information to the ecom server
         :param controllerConfigService: the controller configuration service
         :param volumeInstanceName: the volume instance name
+        :param extraSpecs: additional info
         :returns: firstVolumeInstanceName - instance name of the first volume
                                             in the storage group
         """
@@ -274,15 +266,15 @@ class EMCVMAXFast(object):
         poolInstanceName = self.utils.get_assoc_pool_from_volume(
             conn, volumeInstanceName)
         if poolInstanceName is None:
-            exceptionMessage = (_("Unable to get associated pool of volume"))
-            LOG.error(exceptionMessage)
+            LOG.error(_LE("Unable to get associated pool of volume."))
             return failedRet
 
         volumeName = 'vol1'
         volumeSize = '1'
-        volumeDict, rc = self.provision.create_volume_from_pool(
-            conn, storageConfigurationInstanceName, volumeName,
-            poolInstanceName, volumeSize)
+        volumeDict, _ = (
+            self.provision.create_volume_from_pool(
+                conn, storageConfigurationInstanceName, volumeName,
+                poolInstanceName, volumeSize, extraSpecs))
         firstVolumeInstanceName = self.utils.find_volume_instance(
             conn, volumeDict, volumeName)
         return firstVolumeInstanceName
@@ -290,7 +282,7 @@ class EMCVMAXFast(object):
     def add_storage_group_to_tier_policy_rule(
             self, conn, tierPolicyServiceInstanceName,
             storageGroupInstanceName, tierPolicyRuleInstanceName,
-            storageGroupName, fastPolicyName):
+            storageGroupName, fastPolicyName, extraSpecs):
         """Add the storage group to the tier policy rule.
 
         :param conn: the connection information to the ecom server
@@ -299,8 +291,9 @@ class EMCVMAXFast(object):
         :param tierPolicyRuleInstanceName: tier policy instance name
         :param storageGroupName: the storage group name (String)
         :param fastPolicyName: the fast policy name (String)
+        :param extraSpecs: additional info
         """
-        # 5 is ("Add InElements to Policy")
+        # 5 is ("Add InElements to Policy").
         modificationType = '5'
 
         rc, job = conn.InvokeMethod(
@@ -309,12 +302,13 @@ class EMCVMAXFast(object):
             Operation=self.utils.get_num(modificationType, '16'),
             InElements=[storageGroupInstanceName])
         if rc != 0L:
-            rc, errordesc = self.utils.wait_for_job_complete(conn, job)
+            rc, errordesc = self.utils.wait_for_job_complete(conn, job,
+                                                             extraSpecs)
             if rc != 0L:
                 exceptionMessage = (_(
                     "Error associating storage group : %(storageGroupName)s. "
                     "To fast Policy: %(fastPolicyName)s with error "
-                    "description: %(errordesc)s")
+                    "description: %(errordesc)s.")
                     % {'storageGroupName': storageGroupName,
                        'fastPolicyName': fastPolicyName,
                        'errordesc': errordesc})
@@ -329,7 +323,7 @@ class EMCVMAXFast(object):
         """Returns the existing tier policies for a storage system instance.
 
         Given the storage system instance name, get the existing tier
-        policies on that array
+        policies on that array.
 
         :param conn: the connection information to the ecom server
         :param tierPolicyServiceInstanceName: the policy service
@@ -401,8 +395,8 @@ class EMCVMAXFast(object):
 
         if len(storageTierInstanceNames) == 0:
             storageTierInstanceNames = None
-            LOG.warn(_LW("Unable to get storage tiers "
-                         "from tier policy rule."))
+            LOG.warn(_LW(
+                "Unable to get storage tiers from tier policy rule."))
 
         return storageTierInstanceNames
 
@@ -420,18 +414,26 @@ class EMCVMAXFast(object):
         :returns: storageGroupInstanceName - instance name of the default
                                              storage group
         """
-        storageMaskingGroupInstanceNames = conn.AssociatorNames(
+        foundStorageMaskingGroupInstanceName = None
+        storageMaskingGroupInstances = conn.Associators(
             controllerConfigService, ResultClass='CIM_DeviceMaskingGroup')
 
-        for storageMaskingGroupInstanceName in \
-                storageMaskingGroupInstanceNames:
-            storageMaskingGroupInstance = conn.GetInstance(
-                storageMaskingGroupInstanceName)
+        for storageMaskingGroupInstance in \
+                storageMaskingGroupInstances:
+
             if ('_default_' in storageMaskingGroupInstance['ElementName'] and
                     policyName in storageMaskingGroupInstance['ElementName']):
-                return storageMaskingGroupInstanceName
+                # Check that it has not been recently deleted.
+                instance = self.utils.get_existing_instance(
+                    conn, storageMaskingGroupInstance.path)
+                if instance is None:
+                    # Storage Group doesn't exist any more.
+                    foundStorageMaskingGroupInstanceName = None
+                else:
+                    foundStorageMaskingGroupInstanceName = (
+                        storageMaskingGroupInstance.path)
 
-        return None
+        return foundStorageMaskingGroupInstanceName
 
     def _get_associated_storage_groups_from_tier_policy(
             self, conn, tierPolicyInstanceName):
@@ -467,17 +469,18 @@ class EMCVMAXFast(object):
 
     def add_storage_group_and_verify_tier_policy_assoc(
             self, conn, controllerConfigService, storageGroupInstanceName,
-            storageGroupName, fastPolicyName):
+            storageGroupName, fastPolicyName, extraSpecs):
         """Adds a storage group to a tier policy and verifies success.
 
         Add a storage group to a tier policy rule and verify that it was
-        successful by getting the association
+        successful by getting the association.
 
         :param conn: the connection to the ecom server
         :param controllerConfigService: the controller config service
         :param storageGroupInstanceName: the storage group instance name
         :param storageGroupName: the storage group name (String)
         :param fastPolicyName: the fast policy name (String)
+        :param extraSpecs: additional info
         :returns: assocTierPolicyInstanceName
         """
         failedRet = None
@@ -486,50 +489,46 @@ class EMCVMAXFast(object):
             conn, controllerConfigService)
         tierPolicyServiceInstanceName = self.utils.get_tier_policy_service(
             conn, storageSystemInstanceName)
-        # get the fast policy instance name
+        # Get the fast policy instance name.
         tierPolicyRuleInstanceName = self._get_service_level_tier_policy(
             conn, tierPolicyServiceInstanceName, fastPolicyName)
         if tierPolicyRuleInstanceName is None:
-            errorMessage = (_LE(
-                "Cannot find the fast policy %(fastPolicyName)s")
-                % {'fastPolicyName': fastPolicyName})
-
-            LOG.error(errorMessage)
+            LOG.error(_LE(
+                "Cannot find the fast policy %(fastPolicyName)s."),
+                {'fastPolicyName': fastPolicyName})
             return failedRet
         else:
             LOG.debug(
-                "Adding storage group %(storageGroupInstanceName)s to"
-                " tier policy rule %(tierPolicyRuleInstanceName)s"
-                % {'storageGroupInstanceName': storageGroupInstanceName,
-                   'tierPolicyRuleInstanceName': tierPolicyRuleInstanceName})
+                "Adding storage group %(storageGroupInstanceName)s to "
+                "tier policy rule %(tierPolicyRuleInstanceName)s.",
+                {'storageGroupInstanceName': storageGroupInstanceName,
+                 'tierPolicyRuleInstanceName': tierPolicyRuleInstanceName})
 
-            # Associate the new storage group with the existing fast policy
+            # Associate the new storage group with the existing fast policy.
             try:
                 self.add_storage_group_to_tier_policy_rule(
                     conn, tierPolicyServiceInstanceName,
                     storageGroupInstanceName, tierPolicyRuleInstanceName,
-                    storageGroupName, fastPolicyName)
+                    storageGroupName, fastPolicyName, extraSpecs)
             except Exception as ex:
-                LOG.error(_LE("Exception: %s") % six.text_type(ex))
-                errorMessage = (_LE(
+                LOG.error(_LE("Exception: %s"), ex)
+                LOG.error(_LE(
                     "Failed to add storage group %(storageGroupInstanceName)s "
-                    " to tier policy rule %(tierPolicyRuleInstanceName)s")
-                    % {'storageGroupInstanceName': storageGroupInstanceName,
-                       'tierPolicyRuleInstanceName':
-                       tierPolicyRuleInstanceName})
-                LOG.error(errorMessage)
+                    "to tier policy rule %(tierPolicyRuleInstanceName)s."),
+                    {'storageGroupInstanceName': storageGroupInstanceName,
+                     'tierPolicyRuleInstanceName': tierPolicyRuleInstanceName})
                 return failedRet
 
-            # check that the storage group has been associated with with the
-            # tier policy rule
+            # Check that the storage group has been associated with with the
+            # tier policy rule.
             assocTierPolicyInstanceName = (
                 self.get_associated_tier_policy_from_storage_group(
                     conn, storageGroupInstanceName))
 
             LOG.debug(
                 "AssocTierPolicyInstanceName is "
-                "%(assocTierPolicyInstanceName)s "
-                % {'assocTierPolicyInstanceName': assocTierPolicyInstanceName})
+                "%(assocTierPolicyInstanceName)s.",
+                {'assocTierPolicyInstanceName': assocTierPolicyInstanceName})
         return assocTierPolicyInstanceName
 
     def get_associated_policy_from_storage_group(
@@ -555,7 +554,8 @@ class EMCVMAXFast(object):
 
     def delete_storage_group_from_tier_policy_rule(
             self, conn, tierPolicyServiceInstanceName,
-            storageGroupInstanceName, tierPolicyRuleInstanceName):
+            storageGroupInstanceName, tierPolicyRuleInstanceName,
+            extraSpecs):
         """Disassociate the storage group from its tier policy rule.
 
         :param conn: connection the ecom server
@@ -564,10 +564,11 @@ class EMCVMAXFast(object):
         :param storageGroupInstanceName: instance name of the storage group
         :param tierPolicyRuleInstanceName: instance name of the tier policy
                                            associated with the storage group
+        :param extraSpecs: additional information
         """
         modificationType = '6'
-        LOG.debug("Invoking ModifyStorageTierPolicyRule"
-                  " %s" % tierPolicyRuleInstanceName)
+        LOG.debug("Invoking ModifyStorageTierPolicyRule %s.",
+                  tierPolicyRuleInstanceName)
         try:
             rc, job = conn.InvokeMethod(
                 'ModifyStorageTierPolicyRule', tierPolicyServiceInstanceName,
@@ -575,17 +576,18 @@ class EMCVMAXFast(object):
                 Operation=self.utils.get_num(modificationType, '16'),
                 InElements=[storageGroupInstanceName])
             if rc != 0L:
-                rc, errordesc = self.utils.wait_for_job_complete(conn, job)
+                rc, errordesc = self.utils.wait_for_job_complete(conn, job,
+                                                                 extraSpecs)
                 if rc != 0L:
                     LOG.error(_LE("Error disassociating storage group from "
-                                  "policy: %s") % errordesc)
+                              "policy: %s."), errordesc)
                 else:
-                    LOG.debug("Disassociated storage group from policy %s")
+                    LOG.debug("Disassociated storage group from policy.")
             else:
-                LOG.debug("ModifyStorageTierPolicyRule completed")
+                LOG.debug("ModifyStorageTierPolicyRule completed.")
         except Exception as e:
-            LOG.info(_LI("Storage group not associated with the policy %s")
-                     % six.text_type(e))
+            LOG.info(_LI("Storage group not associated with the "
+                         "policy. Exception is %s."), e)
 
     def get_pool_associated_to_policy(
             self, conn, fastPolicyName, arraySN,
@@ -593,7 +595,7 @@ class EMCVMAXFast(object):
         """Given a FAST policy check that the pool is linked to the policy.
 
         If it's associated return the pool instance, if not return None.
-        First check if FAST is enabled on the array
+        First check if FAST is enabled on the array.
 
         :param conn: the ecom connection
         :param fastPolicyName: the fast policy name (String)
@@ -608,7 +610,7 @@ class EMCVMAXFast(object):
 
         if not self._check_if_fast_supported(conn, storageSystemInstanceName):
             errorMessage = (_(
-                "FAST is not supported on this array "))
+                "FAST is not supported on this array."))
             LOG.error(errorMessage)
             exception.VolumeBackendAPIException(data=errorMessage)
 
@@ -617,11 +619,11 @@ class EMCVMAXFast(object):
 
         tierPolicyRuleInstanceName = self._get_service_level_tier_policy(
             conn, tierPolicyServiceInstanceName, fastPolicyName)
-        # Get the associated storage tiers from the tier policy rule
+        # Get the associated storage tiers from the tier policy rule.
         storageTierInstanceNames = self.get_associated_tier_from_tier_policy(
             conn, tierPolicyRuleInstanceName)
 
-        # For each gold storage tier get the associated pools
+        # For each gold storage tier get the associated pools.
         foundPoolInstanceName = None
         for storageTierInstanceName in storageTierInstanceNames:
             assocStoragePoolInstanceNames = (
@@ -652,7 +654,7 @@ class EMCVMAXFast(object):
             isTieringPolicySupported = self.is_tiering_policy_enabled(
                 conn, tierPolicyServiceInstanceName)
         except Exception as e:
-            LOG.error(_LE("Exception: %s") % six.text_type(e))
+            LOG.error(_LE("Exception: %s."), e)
             return False
 
         return isTieringPolicySupported
@@ -694,34 +696,45 @@ class EMCVMAXFast(object):
         tierInstanceNames = self.get_associated_tier_from_tier_policy(
             conn, policyInstanceName)
         for tierInstanceName in tierInstanceNames:
-            poolInsttanceNames = self.get_associated_pools_from_tier(
+            # Check that tier hasn't suddenly been deleted.
+            instance = self.utils.get_existing_instance(conn, tierInstanceName)
+            if instance is None:
+                # Tier doesn't exist any more.
+                break
+
+            poolInstanceNames = self.get_associated_pools_from_tier(
                 conn, tierInstanceName)
-            for poolInstanceName in poolInsttanceNames:
-                storagePoolInstance = conn.GetInstance(
-                    poolInstanceName, LocalOnly=False)
+            for poolInstanceName in poolInstanceNames:
+                # Check that pool hasn't suddenly been deleted.
+                storagePoolInstance = self.utils.get_existing_instance(
+                    conn, poolInstanceName)
+                if storagePoolInstance is None:
+                    # Pool doesn't exist any more.
+                    break
                 total_capacity_gb += self.utils.convert_bits_to_gbs(
                     storagePoolInstance['TotalManagedSpace'])
                 allocated_capacity_gb += self.utils.convert_bits_to_gbs(
                     storagePoolInstance['EMCSubscribedCapacity'])
                 LOG.debug(
-                    "policyName:%(policyName)s, pool: %(poolInstanceName)s, "
-                    "allocated_capacity_gb = %(allocated_capacity_gb)lu"
-                    % {'policyName': policyName,
-                       'poolInstanceName': poolInstanceName,
-                       'allocated_capacity_gb': allocated_capacity_gb})
+                    "PolicyName:%(policyName)s, pool: %(poolInstanceName)s, "
+                    "allocated_capacity_gb = %(allocated_capacity_gb)lu.",
+                    {'policyName': policyName,
+                     'poolInstanceName': poolInstanceName,
+                     'allocated_capacity_gb': allocated_capacity_gb})
 
         free_capacity_gb = total_capacity_gb - allocated_capacity_gb
         return (total_capacity_gb, free_capacity_gb)
 
     def get_or_create_default_storage_group(
             self, conn, controllerConfigService, fastPolicyName,
-            volumeInstance):
+            volumeInstance, extraSpecs):
         """Create or get a default storage group for FAST policy.
 
         :param conn: the ecom connection
         :param controllerConfigService: the controller configuration service
         :param fastPolicyName: the fast policy name (String)
         :param volumeInstance: the volume instance
+        :param extraSpecs: additional info
         :returns: defaultStorageGroupInstanceName - the default storage group
                                                     instance name
         """
@@ -732,13 +745,14 @@ class EMCVMAXFast(object):
                                                   controllerConfigService,
                                                   defaultSgGroupName))
         if defaultStorageGroupInstanceName is None:
-            # create it and associate it with the FAST policy in question
+            # Create it and associate it with the FAST policy in question.
             defaultStorageGroupInstanceName = (
                 self._create_default_storage_group(conn,
                                                    controllerConfigService,
                                                    fastPolicyName,
                                                    defaultSgGroupName,
-                                                   volumeInstance))
+                                                   volumeInstance,
+                                                   extraSpecs))
 
         return defaultStorageGroupInstanceName
 
@@ -778,13 +792,13 @@ class EMCVMAXFast(object):
             volumeInstanceName,
             ResultClass='CIM_DeviceMaskingGroup')
         if len(sgInstanceNames) == 0:
-            LOG.debug("volume  %(vol)s is not in default sg."
-                      % {'vol': volumeInstanceName})
+            LOG.debug("volume  %(vol)s is not in default sg.",
+                      {'vol': volumeInstanceName})
             return False
         else:
             for sgInstance in sgInstanceNames:
                 if DEFAULT_SG_PREFIX in sgInstance['InstanceID']:
-                    LOG.debug("volume  %(vol)s already in default sg."
-                              % {'vol': volumeInstanceName})
+                    LOG.debug("volume  %(vol)s already in default sg.",
+                              {'vol': volumeInstanceName})
                     return True
         return False

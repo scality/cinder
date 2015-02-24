@@ -17,7 +17,7 @@ import datetime
 
 from lxml import etree
 import mock
-from oslo.config import cfg
+from oslo_config import cfg
 import webob
 
 from cinder.api import extensions
@@ -645,9 +645,9 @@ class VolumeApiTest(test.TestCase):
             self.assertEqual(len(volumes), 1)
             self.assertEqual(volumes[0]['id'], 2)
 
-        #admin case
+        # admin case
         volume_detail_limit_offset(is_admin=True)
-        #non_admin case
+        # non_admin case
         volume_detail_limit_offset(is_admin=False)
 
     def test_volume_show_with_admin_metadata(self):

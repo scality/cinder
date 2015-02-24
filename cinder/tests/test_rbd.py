@@ -21,8 +21,8 @@ import os
 import tempfile
 
 import mock
-from oslo.utils import timeutils
-from oslo.utils import units
+from oslo_utils import timeutils
+from oslo_utils import units
 
 from cinder import db
 from cinder import exception
@@ -239,7 +239,7 @@ class RBDTestCase(test.TestCase):
                           self.driver.manage_existing,
                           self.volume, existing_ref)
 
-        #make sure the exception was raised
+        # Make sure the exception was raised
         self.assertEqual(RAISED_EXCEPTIONS,
                          [self.mock_rbd.ImageExists])
 
@@ -472,7 +472,7 @@ class RBDTestCase(test.TestCase):
         volume.parent_info.assert_called_once_with()
 
     @common_mocks
-    def test_create_cloned_volume(self):
+    def test_create_cloned_volume_same_size(self):
         src_name = u'volume-00000001'
         dst_name = u'volume-00000002'
 
@@ -481,19 +481,59 @@ class RBDTestCase(test.TestCase):
         with mock.patch.object(self.driver, '_get_clone_depth') as \
                 mock_get_clone_depth:
             # Try with no flatten required
-            mock_get_clone_depth.return_value = 1
+            with mock.patch.object(self.driver, '_resize') as mock_resize:
+                mock_get_clone_depth.return_value = 1
 
-            self.driver.create_cloned_volume({'name': dst_name},
-                                             {'name': src_name})
+                self.driver.create_cloned_volume({'name': dst_name,
+                                                  'size': 10},
+                                                 {'name': src_name,
+                                                  'size': 10})
 
-            (self.mock_rbd.Image.return_value.create_snap
-                .assert_called_once_with('.'.join((dst_name, 'clone_snap'))))
-            (self.mock_rbd.Image.return_value.protect_snap
-                .assert_called_once_with('.'.join((dst_name, 'clone_snap'))))
-            self.assertEqual(
-                1, self.mock_rbd.RBD.return_value.clone.call_count)
-            self.mock_rbd.Image.return_value.close.assert_called_once_with()
-            self.assertTrue(mock_get_clone_depth.called)
+                (self.mock_rbd.Image.return_value.create_snap
+                    .assert_called_once_with('.'.join((dst_name,
+                                                       'clone_snap'))))
+                (self.mock_rbd.Image.return_value.protect_snap
+                    .assert_called_once_with('.'.join((dst_name,
+                                                       'clone_snap'))))
+                self.assertEqual(
+                    1, self.mock_rbd.RBD.return_value.clone.call_count)
+                self.mock_rbd.Image.return_value.close \
+                    .assert_called_once_with()
+                self.assertTrue(mock_get_clone_depth.called)
+                self.assertEqual(
+                    0, mock_resize.call_count)
+
+    @common_mocks
+    def test_create_cloned_volume_different_size(self):
+        src_name = u'volume-00000001'
+        dst_name = u'volume-00000002'
+
+        self.cfg.rbd_max_clone_depth = 2
+
+        with mock.patch.object(self.driver, '_get_clone_depth') as \
+                mock_get_clone_depth:
+            # Try with no flatten required
+            with mock.patch.object(self.driver, '_resize') as mock_resize:
+                mock_get_clone_depth.return_value = 1
+
+                self.driver.create_cloned_volume({'name': dst_name,
+                                                  'size': 20},
+                                                 {'name': src_name,
+                                                  'size': 10})
+
+                (self.mock_rbd.Image.return_value.create_snap
+                    .assert_called_once_with('.'.join((dst_name,
+                                                       'clone_snap'))))
+                (self.mock_rbd.Image.return_value.protect_snap
+                    .assert_called_once_with('.'.join((dst_name,
+                                                       'clone_snap'))))
+                self.assertEqual(
+                    1, self.mock_rbd.RBD.return_value.clone.call_count)
+                self.mock_rbd.Image.return_value.close \
+                    .assert_called_once_with()
+                self.assertTrue(mock_get_clone_depth.called)
+                self.assertEqual(
+                    1, mock_resize.call_count)
 
     @common_mocks
     def test_create_cloned_volume_w_flatten(self):
@@ -1041,7 +1081,8 @@ class ManagedRBDTestCase(DriverTestCase):
     def test_create_vol_from_image_status_available(self):
         """Clone raw image then verify volume is in available state."""
 
-        def _mock_clone_image(volume, image_location, image_meta):
+        def _mock_clone_image(context, volume, image_location,
+                              image_meta, image_service):
             return {'provider_location': None}, True
 
         with mock.patch.object(self.volume.driver, 'clone_image') as \
@@ -1060,7 +1101,8 @@ class ManagedRBDTestCase(DriverTestCase):
     def test_create_vol_from_non_raw_image_status_available(self):
         """Clone non-raw image then verify volume is in available state."""
 
-        def _mock_clone_image(volume, image_location, image_meta):
+        def _mock_clone_image(context, volume, image_location,
+                              image_meta, image_service):
             return {'provider_location': None}, False
 
         with mock.patch.object(self.volume.driver, 'clone_image') as \
@@ -1096,11 +1138,15 @@ class ManagedRBDTestCase(DriverTestCase):
 
         with mock.patch.object(driver, '_is_cloneable', lambda *args: False):
             image_loc = (mock.Mock(), mock.Mock())
-            actual = driver.clone_image(mock.Mock(), image_loc, {})
+            actual = driver.clone_image(mock.Mock(),
+                                        mock.Mock(),
+                                        image_loc,
+                                        {},
+                                        mock.Mock())
             self.assertEqual(({}, False), actual)
 
         self.assertEqual(({}, False),
-                         driver.clone_image(object(), None, {}))
+                         driver.clone_image('', object(), None, {}, ''))
 
     def test_clone_success(self):
         expected = ({'provider_location': None}, True)
@@ -1116,9 +1162,12 @@ class ManagedRBDTestCase(DriverTestCase):
                     image_loc = ('rbd://fee/fi/fo/fum', None)
 
                     volume = {'name': 'vol1'}
-                    actual = driver.clone_image(volume, image_loc,
+                    actual = driver.clone_image(mock.Mock(),
+                                                volume,
+                                                image_loc,
                                                 {'disk_format': 'raw',
-                                                 'id': 'id.foo'})
+                                                 'id': 'id.foo'},
+                                                mock.Mock())
 
                     self.assertEqual(expected, actual)
                     mock_clone.assert_called_once_with(volume,

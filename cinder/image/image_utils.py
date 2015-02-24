@@ -25,13 +25,14 @@ we should look at maybe pushing this up to Oslo
 
 
 import contextlib
+import math
 import os
 import tempfile
 
-from oslo.config import cfg
-from oslo.utils import timeutils
-from oslo.utils import units
 from oslo_concurrency import processutils
+from oslo_config import cfg
+from oslo_utils import timeutils
+from oslo_utils import units
 
 from cinder import exception
 from cinder.i18n import _
@@ -238,7 +239,8 @@ def fetch_to_volume_format(context, image_service,
             LOG.debug('Copying image from %(tmp)s to volume %(dest)s - '
                       'size: %(size)s' % {'tmp': tmp, 'dest': dest,
                                           'size': image_meta['size']})
-            volume_utils.copy_volume(tmp, dest, image_meta['size'], blocksize)
+            image_size_m = math.ceil(image_meta['size'] / units.Mi)
+            volume_utils.copy_volume(tmp, dest, image_size_m, blocksize)
             return
 
         data = qemu_img_info(tmp, run_as_root=run_as_root)
